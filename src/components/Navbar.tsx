@@ -57,6 +57,7 @@ export default function Navbar({ lang, setLang, onNavigate, onOpenQuickHelp }: N
   const menuItems = [
     { id: 'solutions', labelAr: 'حلولنا', labelEn: 'Our Solutions' },
     { id: 'sectors', labelAr: 'قطاعات العمل', labelEn: 'Sectors' },
+    { id: 'services-market', labelAr: 'سوق الخدمات', labelEn: 'Services Market' },
     { id: 'portfolio', labelAr: 'أعمالنا', labelEn: 'Our Work' },
     { id: 'clients', labelAr: 'شركاؤنا', labelEn: 'Partners' },
     { id: 'about', labelAr: 'من نحن', labelEn: 'About Us' },
@@ -117,10 +118,15 @@ export default function Navbar({ lang, setLang, onNavigate, onOpenQuickHelp }: N
             <button
               id="ai-quick-help-nav"
               onClick={onOpenQuickHelp}
-              className="flex items-center space-x-1.5 rtl:space-x-reverse px-3 py-1.5 rounded-lg bg-gradient-to-r from-sky-500/10 to-indigo-600/15 text-indigo-700 hover:text-indigo-800 text-xs font-bold border border-indigo-200/50 hover:border-indigo-300 transition-all cursor-pointer shadow-3xs relative overflow-hidden group active:scale-98"
+              className="flex items-center space-x-2 rtl:space-x-reverse px-3 py-1.5 rounded-lg bg-gradient-to-r from-sky-500/10 to-indigo-600/15 text-indigo-700 hover:text-indigo-800 text-xs font-bold border border-indigo-200/50 hover:border-indigo-300 transition-all cursor-pointer shadow-3xs relative overflow-hidden group active:scale-98"
             >
               <Sparkles className="w-3.5 h-3.5 text-indigo-600 group-hover:animate-spin" />
               <span>{lang === 'ar' ? 'المساعد الذكي' : 'AI Help'}</span>
+              <kbd className="hidden lg:inline-flex items-center gap-0.5 h-4.5 px-1.5 rounded bg-indigo-600/10 text-[9px] text-indigo-600 dark:text-indigo-400 font-mono tracking-tight select-none">
+                <span className="text-[8px]">Ctrl</span>
+                <span>+</span>
+                <span>K</span>
+              </kbd>
             </button>
 
             {/* Lang Switch */}

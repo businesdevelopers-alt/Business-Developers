@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { Lang } from '../types';
-import { Sparkles, Linkedin, Twitter, Mail, ShieldAlert } from 'lucide-react';
+import { Sparkles, Linkedin, Twitter, Mail, ShieldAlert, Copy, Check, PhoneCall } from 'lucide-react';
 
 interface FooterProps {
   lang: Lang;
@@ -8,6 +9,18 @@ interface FooterProps {
 
 export default function Footer({ lang, onNavigate }: FooterProps) {
   const isAr = lang === 'ar';
+  const [copiedType, setCopiedType] = useState<'email' | 'phone' | null>(null);
+
+  const handleCopy = (type: 'email' | 'phone', text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedType(type);
+      setTimeout(() => {
+        setCopiedType(null);
+      }, 2000);
+    }).catch((err) => {
+      console.error('Failed to copy: ', err);
+    });
+  };
 
   return (
     <footer className="bg-slate-900 text-slate-400 py-12 border-t border-slate-800 font-sans">
@@ -92,6 +105,62 @@ export default function Footer({ lang, onNavigate }: FooterProps) {
                 <Mail className="w-4.5 h-4.5" />
               </a>
             </div>
+
+            <div className="pt-3 border-t border-slate-800/60 space-y-2">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block font-sans">
+                {isAr ? 'نسخ بيانات الاتصال السريع' : 'Copy Quick Contact Info'}
+              </span>
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleCopy('email', 'info@businessdevelopers.sa')}
+                  className="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 hover:border-slate-600 text-[11px] text-slate-300 transition-all cursor-pointer group w-full text-right ltr:text-left"
+                >
+                  <span className="flex items-center gap-1.5 font-mono overflow-hidden">
+                    <Mail className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                    <span className="truncate">info@businessdevelopers.sa</span>
+                  </span>
+                  <span className="text-[10px] text-sky-400 font-bold flex items-center gap-1 shrink-0">
+                    {copiedType === 'email' ? (
+                      <>
+                        <Check className="w-3 h-3 text-emerald-400 shrink-0" />
+                        <span className="text-emerald-400">{isAr ? 'تم النسخ!' : 'Copied!'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3 h-3 text-slate-500 group-hover:text-slate-400 shrink-0" />
+                        <span>{isAr ? 'نسخ' : 'Copy'}</span>
+                      </>
+                    )}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleCopy('phone', '+966 11 500 2030')}
+                  className="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 hover:border-slate-600 text-[11px] text-slate-300 transition-all cursor-pointer group w-full text-right ltr:text-left"
+                >
+                  <span className="flex items-center gap-1.5 font-mono overflow-hidden">
+                    <PhoneCall className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                    <span className="truncate">+966 11 500 2030</span>
+                  </span>
+                  <span className="text-[10px] text-sky-400 font-bold flex items-center gap-1 shrink-0">
+                    {copiedType === 'phone' ? (
+                      <>
+                        <Check className="w-3 h-3 text-emerald-400 shrink-0" />
+                        <span className="text-emerald-400">{isAr ? 'تم النسخ!' : 'Copied!'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3 h-3 text-slate-500 group-hover:text-slate-400 shrink-0" />
+                        <span>{isAr ? 'نسخ' : 'Copy'}</span>
+                      </>
+                    )}
+                  </span>
+                </button>
+              </div>
+            </div>
+
             <div className="text-[10px] text-slate-500 font-mono">
               IP-Ingress Proxy: Secure Tunnel 3000
             </div>

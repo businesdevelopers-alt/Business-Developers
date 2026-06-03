@@ -272,6 +272,13 @@ export default function QuickHelpModal({ isOpen, onClose, lang }: QuickHelpModal
                 </div>
 
                 <div className="flex items-center space-x-1.5 rtl:space-x-reverse">
+                  {/* Shortcut Hint */}
+                  <div className="hidden sm:flex items-center gap-0.5 text-[9px] text-slate-400 bg-slate-950/50 px-2 py-1.5 rounded-lg border border-slate-800/80 font-mono select-none">
+                    <kbd>Ctrl</kbd>
+                    <span>+</span>
+                    <kbd>K</kbd>
+                  </div>
+
                   {/* Reset Chat button */}
                   <button
                     id="ai-help-reset-btn"

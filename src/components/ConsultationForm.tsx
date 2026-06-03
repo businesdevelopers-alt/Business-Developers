@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Lang, ContactInquiry } from '../types';
 import { SECTORS, SOLUTIONS } from '../data';
-import { Send, CheckCircle2, Sparkles, Server, Terminal, HelpCircle, PhoneCall, Building, Cpu, ExternalLink } from 'lucide-react';
+import { Send, CheckCircle2, Sparkles, Server, Terminal, HelpCircle, PhoneCall, Building, Cpu, ExternalLink, Copy, Check, Mail } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import SuccessFeedbackModal from './SuccessFeedbackModal';
 
@@ -24,6 +24,7 @@ export default function ConsultationForm({ lang, preselectedSectorId = '', prese
     message: ''
   });
 
+  const [errors, setErrors] = useState<Partial<Record<keyof ContactInquiry, string>>>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisStep, setAnalysisStep] = useState(0);
@@ -33,31 +34,110 @@ export default function ConsultationForm({ lang, preselectedSectorId = '', prese
     duration: string;
   } | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [copiedType, setCopiedType] = useState<'email' | 'phone' | null>(null);
+
+  const handleCopyValue = (text: string, type: 'email' | 'phone') => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedType(type);
+      setTimeout(() => setCopiedType(null), 2000);
+    }).catch(err => {
+      console.error('Failed to copy text: ', err);
+    });
+  };
 
   // Sync route pre-selections
   useEffect(() => {
     if (preselectedSectorId) {
       setFormData(prev => ({ ...prev, sectorId: preselectedSectorId }));
+      setErrors(prev => ({ ...prev, sectorId: undefined }));
     }
   }, [preselectedSectorId]);
 
   useEffect(() => {
     if (preselectedSolutionId) {
       setFormData(prev => ({ ...prev, solutionId: preselectedSolutionId }));
+      setErrors(prev => ({ ...prev, solutionId: undefined }));
     }
   }, [preselectedSolutionId]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+    if (errors[name as keyof ContactInquiry]) {
+      setErrors(prev => ({ ...prev, [name]: undefined }));
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.email || !formData.companyName) {
-      alert(isAr ? 'الرجاء ملء الحقول الإجبارية (الاسم، البريد الإلكتروني، اسم المنشأة)' : 'Please fill out required fields (Name, Email, Company)');
+
+    const newErrors: Partial<Record<keyof ContactInquiry, string>> = {};
+
+    // 1. Full name validation
+    if (!formData.name || formData.name.trim().length < 2) {
+      newErrors.name = isAr
+        ? 'الرجاء إدخال الاسم بالكامل (حرفان على الأقل)'
+        : 'Full name is required (minimum 2 characters)';
+    }
+
+    // 2. Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!formData.email) {
+      newErrors.email = isAr
+        ? 'البريد الإلكتروني المهني مطلوب'
+        : 'Corporate email is required';
+    } else if (!emailRegex.test(formData.email.trim())) {
+      newErrors.email = isAr
+        ? 'صيغة البريد الإلكتروني غير صالحة (مثال: name@company.com)'
+        : 'Invalid email format (e.g. name@company.com)';
+    }
+
+    // 3. Company name validation
+    if (!formData.companyName || formData.companyName.trim().length < 2) {
+      newErrors.companyName = isAr
+        ? 'اسم المنشأة أو الجهة مطلوب'
+        : 'Company name is required';
+    }
+
+    // 4. Phone validation (optional, but if entered, should be valid)
+    if (formData.phone && formData.phone.trim().length > 0) {
+      const cleaned = formData.phone.trim();
+      const phoneRegex = /^[+]*[(]{0,1}[0-9]{1,4}[)]{0,1}[-\s\./0-9]*$/;
+      if (cleaned.length < 7 || !phoneRegex.test(cleaned)) {
+        newErrors.phone = isAr
+          ? 'رقم الهاتف غير صالح (٧ أرقام على الأقل)'
+          : 'Invalid phone format (minimum 7 digits)';
+      }
+    }
+
+    // 5. Sector validation
+    if (!formData.sectorId) {
+      newErrors.sectorId = isAr
+        ? 'الرجاء اختيار قطاع العمل المستهدف'
+        : 'Please select a target industry sector';
+    }
+
+    // 6. Solution validation
+    if (!formData.solutionId) {
+      newErrors.solutionId = isAr
+        ? 'الرجاء اختيار الحل التقني المطلوب'
+        : 'Please select a demanded tech solution';
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      // Cleanest focus / scroll to the first element that failed validation
+      const firstErrorKey = Object.keys(newErrors)[0];
+      const element = document.getElementsByName(firstErrorKey)[0];
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        element.focus();
+      }
       return;
     }
+
+    // Clear any previous errors
+    setErrors({});
 
     // Generate dynamic tech stack recommendations based on selected credentials
     const sec = formData.sectorId || 'banking';
@@ -121,6 +201,7 @@ export default function ConsultationForm({ lang, preselectedSectorId = '', prese
       solutionId: '',
       message: ''
     });
+    setErrors({});
     setIsSubmitted(false);
     setIsAnalyzing(false);
     setAnalysisStep(0);
@@ -160,23 +241,61 @@ export default function ConsultationForm({ lang, preselectedSectorId = '', prese
 
               {/* Direct touch details */}
               <div className="pt-6 border-t border-white/10 space-y-4">
-                <div className="flex items-center space-x-3.5 rtl:space-x-reverse">
-                  <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center text-sky-400 shrink-0">
-                    <PhoneCall className="w-5 h-5" />
+                <div className="flex items-center justify-between gap-3 p-2 bg-white/5 rounded-2xl hover:bg-white/10 transition-all border border-white/5 hover:border-white/10 group">
+                  <div className="flex items-center space-x-3.5 rtl:space-x-reverse min-w-0">
+                    <div className="w-10 h-10 rounded-xl bg-sky-500/10 flex items-center justify-center text-sky-400 shrink-0 group-hover:bg-sky-500/20 transition-all">
+                      <PhoneCall className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-[11px] text-slate-400 block">{isAr ? 'مستشار مبيعات القطاعات' : 'Corporate Sector Line'}</span>
+                      <span className="text-sm font-mono font-bold text-white block truncate">+966 11 500 2030</span>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-[11px] text-slate-400 block">{isAr ? 'مستشار مبيعات القطاعات' : 'Corporate Sector Line'}</span>
-                    <span className="text-sm font-mono font-bold">+966 11 500 2030</span>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyValue('+966 11 500 2030', 'phone')}
+                    title={isAr ? 'نسخ رقم الهاتف' : 'Copy Phone Number'}
+                    className="p-2.5 rounded-xl bg-white/5 hover:bg-sky-600 hover:text-white text-slate-300 transition-all cursor-pointer flex items-center justify-center shrink-0"
+                  >
+                    {copiedType === 'phone' ? (
+                      <Check className="w-4 h-4 text-emerald-400" />
+                    ) : (
+                      <Copy className="w-4 h-4 text-sky-400/80 group-hover:text-white" />
+                    )}
+                  </button>
                 </div>
 
-                <div className="flex items-center space-x-3.5 rtl:space-x-reverse">
-                  <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center text-sky-400 shrink-0">
+                <div className="flex items-center justify-between gap-3 p-2 bg-white/5 rounded-2xl hover:bg-white/10 transition-all border border-white/5 hover:border-white/10 group">
+                  <div className="flex items-center space-x-3.5 rtl:space-x-reverse min-w-0">
+                    <div className="w-10 h-10 rounded-xl bg-sky-500/10 flex items-center justify-center text-sky-400 shrink-0 group-hover:bg-sky-500/20 transition-all">
+                      <Mail className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-[11px] text-slate-400 block">{isAr ? 'البريد الإلكتروني المؤسسي' : 'Corporate Email'}</span>
+                      <span className="text-sm font-mono font-bold text-white block truncate">info@businessdevelopers.sa</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyValue('info@businessdevelopers.sa', 'email')}
+                    title={isAr ? 'نسخ البريد الإلكتروني' : 'Copy Email Address'}
+                    className="p-2.5 rounded-xl bg-white/5 hover:bg-sky-600 hover:text-white text-slate-300 transition-all cursor-pointer flex items-center justify-center shrink-0"
+                  >
+                    {copiedType === 'email' ? (
+                      <Check className="w-4 h-4 text-emerald-400" />
+                    ) : (
+                      <Copy className="w-4 h-4 text-sky-400/80 group-hover:text-white" />
+                    )}
+                  </button>
+                </div>
+
+                <div className="flex items-center space-x-3.5 rtl:space-x-reverse p-2">
+                  <div className="w-10 h-10 rounded-xl bg-sky-500/10 flex items-center justify-center text-sky-400 shrink-0">
                     <Building className="w-5 h-5" />
                   </div>
                   <div>
                     <span className="text-[11px] text-slate-400 block">{isAr ? 'المقر الرئيسي' : 'Headquarters'}</span>
-                    <span className="text-sm font-semibold truncate block">
+                    <span className="text-sm font-semibold truncate block text-white">
                       {isAr ? 'الرياض، المملكة العربية السعودية' : 'Riyadh, Saudi Arabia'}
                     </span>
                   </div>
@@ -218,6 +337,7 @@ export default function ConsultationForm({ lang, preselectedSectorId = '', prese
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   onSubmit={handleSubmit}
+                  noValidate
                   className="space-y-6"
                 >
                   <div className="border-b border-slate-100 pb-4">
@@ -238,12 +358,21 @@ export default function ConsultationForm({ lang, preselectedSectorId = '', prese
                       <input
                         type="text"
                         name="name"
-                        required
                         value={formData.name}
                         onChange={handleChange}
                         placeholder={isAr ? 'مثال: محمد السديري' : 'e.g. Liam Smith'}
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-slate-800 text-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none transition-all placeholder:text-slate-300"
+                        className={`w-full rounded-xl border px-4 py-3 text-slate-800 text-sm outline-none transition-all placeholder:text-slate-300 ${
+                          errors.name
+                            ? 'border-rose-400 bg-rose-50/10 focus:border-rose-500 focus:ring-1 focus:ring-rose-500'
+                            : 'border-slate-200 focus:border-sky-500 focus:ring-1 focus:ring-sky-500'
+                        }`}
                       />
+                      {errors.name && (
+                        <p className="text-rose-500 text-[11px] font-bold mt-1.5 flex items-center gap-1">
+                          <span className="w-1 h-1 rounded-full bg-rose-500 shrink-0" />
+                          <span>{errors.name}</span>
+                        </p>
+                      )}
                     </div>
 
                     <div>
@@ -253,12 +382,21 @@ export default function ConsultationForm({ lang, preselectedSectorId = '', prese
                       <input
                         type="email"
                         name="email"
-                        required
                         value={formData.email}
                         onChange={handleChange}
                         placeholder="address@company.com"
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-slate-800 text-sm focus:border-sky-500-custom focus:ring-1 focus:ring-sky-500 outline-none transition-all placeholder:text-slate-300"
+                        className={`w-full rounded-xl border px-4 py-3 text-slate-800 text-sm outline-none transition-all placeholder:text-slate-300 ${
+                          errors.email
+                            ? 'border-rose-400 bg-rose-50/10 focus:border-rose-500 focus:ring-1 focus:ring-rose-500'
+                            : 'border-slate-200 focus:border-sky-500 focus:ring-1 focus:ring-sky-500'
+                        }`}
                       />
+                      {errors.email && (
+                        <p className="text-rose-500 text-[11px] font-bold mt-1.5 flex items-center gap-1">
+                          <span className="w-1 h-1 rounded-full bg-rose-500 shrink-0" />
+                          <span>{errors.email}</span>
+                        </p>
+                      )}
                     </div>
 
                     <div>
@@ -268,12 +406,21 @@ export default function ConsultationForm({ lang, preselectedSectorId = '', prese
                       <input
                         type="text"
                         name="companyName"
-                        required
                         value={formData.companyName}
                         onChange={handleChange}
                         placeholder={isAr ? 'مثال: شركة التطوير العقاري' : 'e.g. Global Logistics Inc.'}
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-slate-800 text-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none transition-all placeholder:text-slate-300"
+                        className={`w-full rounded-xl border px-4 py-3 text-slate-800 text-sm outline-none transition-all placeholder:text-slate-300 ${
+                          errors.companyName
+                            ? 'border-rose-400 bg-rose-50/10 focus:border-rose-500 focus:ring-1 focus:ring-rose-500'
+                            : 'border-slate-200 focus:border-sky-500 focus:ring-1 focus:ring-sky-500'
+                        }`}
                       />
+                      {errors.companyName && (
+                        <p className="text-rose-500 text-[11px] font-bold mt-1.5 flex items-center gap-1">
+                          <span className="w-1 h-1 rounded-full bg-rose-500 shrink-0" />
+                          <span>{errors.companyName}</span>
+                        </p>
+                      )}
                     </div>
 
                     <div>
@@ -286,8 +433,18 @@ export default function ConsultationForm({ lang, preselectedSectorId = '', prese
                         value={formData.phone}
                         onChange={handleChange}
                         placeholder="+966 50 000 0000"
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-slate-800 text-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none transition-all placeholder:text-slate-300"
+                        className={`w-full rounded-xl border px-4 py-3 text-slate-800 text-sm outline-none transition-all placeholder:text-slate-300 ${
+                          errors.phone
+                            ? 'border-rose-400 bg-rose-50/10 focus:border-rose-500 focus:ring-1 focus:ring-rose-500'
+                            : 'border-slate-200 focus:border-sky-500 focus:ring-1 focus:ring-sky-500'
+                        }`}
                       />
+                      {errors.phone && (
+                        <p className="text-rose-500 text-[11px] font-bold mt-1.5 flex items-center gap-1">
+                          <span className="w-1 h-1 rounded-full bg-rose-500 shrink-0" />
+                          <span>{errors.phone}</span>
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -301,7 +458,11 @@ export default function ConsultationForm({ lang, preselectedSectorId = '', prese
                         name="sectorId"
                         value={formData.sectorId}
                         onChange={handleChange}
-                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-800 text-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none transition-all"
+                        className={`w-full rounded-xl border bg-white px-4 py-3 text-slate-800 text-sm outline-none transition-all ${
+                          errors.sectorId
+                            ? 'border-rose-400 bg-rose-50/10 focus:border-rose-500 focus:ring-1 focus:ring-rose-500'
+                            : 'border-slate-200 focus:border-sky-500 focus:ring-1 focus:ring-sky-500'
+                        }`}
                       >
                         <option value="">{isAr ? '--- اختر القطاع المستهدف ---' : '--- Choose Sector ---'}</option>
                         {SECTORS.map(sec => (
@@ -310,6 +471,12 @@ export default function ConsultationForm({ lang, preselectedSectorId = '', prese
                           </option>
                         ))}
                       </select>
+                      {errors.sectorId && (
+                        <p className="text-rose-500 text-[11px] font-bold mt-1.5 flex items-center gap-1">
+                          <span className="w-1 h-1 rounded-full bg-rose-500 shrink-0" />
+                          <span>{errors.sectorId}</span>
+                        </p>
+                      )}
                     </div>
 
                     <div>
@@ -320,7 +487,11 @@ export default function ConsultationForm({ lang, preselectedSectorId = '', prese
                         name="solutionId"
                         value={formData.solutionId}
                         onChange={handleChange}
-                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-800 text-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none transition-all"
+                        className={`w-full rounded-xl border bg-white px-4 py-3 text-slate-800 text-sm outline-none transition-all ${
+                          errors.solutionId
+                            ? 'border-rose-400 bg-rose-50/10 focus:border-rose-500 focus:ring-1 focus:ring-rose-500'
+                            : 'border-slate-200 focus:border-sky-500 focus:ring-1 focus:ring-sky-500'
+                        }`}
                       >
                         <option value="">{isAr ? '--- اختر الحل المطلـوب ---' : '--- Choose Solution ---'}</option>
                         {SOLUTIONS.map(sol => (
@@ -329,6 +500,12 @@ export default function ConsultationForm({ lang, preselectedSectorId = '', prese
                           </option>
                         ))}
                       </select>
+                      {errors.solutionId && (
+                        <p className="text-rose-500 text-[11px] font-bold mt-1.5 flex items-center gap-1">
+                          <span className="w-1 h-1 rounded-full bg-rose-500 shrink-0" />
+                          <span>{errors.solutionId}</span>
+                        </p>
+                      )}
                     </div>
                   </div>
 

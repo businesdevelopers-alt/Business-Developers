@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { PROJECTS } from '../data';
 import { Lang, Project } from '../types';
 import { getIconComponent } from './Icons';
-import { ExternalLink, Briefcase, Sparkles, Filter, Code, CheckCircle, ArrowUpRight } from 'lucide-react';
+import { ExternalLink, Briefcase, Sparkles, Filter, Code, CheckCircle, ArrowUpRight, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import ProjectDetailsModal from './ProjectDetailsModal';
 
 interface PortfolioSectionProps {
   lang: Lang;
@@ -11,6 +12,8 @@ interface PortfolioSectionProps {
 
 export default function PortfolioSection({ lang }: PortfolioSectionProps) {
   const [activeFilter, setActiveFilter] = useState<string>('all');
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
   const isAr = lang === 'ar';
 
   // Get unique sectors for filtering
@@ -93,7 +96,11 @@ export default function PortfolioSection({ lang }: PortfolioSectionProps) {
                   transition={{ duration: 0.35 }}
                   key={project.id}
                   id={`project-card-${project.id}`}
-                  className="bg-white rounded-3xl border border-slate-200/80 shadow-sm flex flex-col justify-between overflow-hidden group hover:border-sky-300 hover:shadow-xl hover:-translate-y-1 transition-all"
+                  onClick={() => {
+                    setSelectedProject(project);
+                    setIsDetailOpen(true);
+                  }}
+                  className="bg-white rounded-3xl border border-slate-200/80 shadow-sm flex flex-col justify-between overflow-hidden group hover:border-sky-300 hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer"
                 >
                   {/* Top Graphic Border & Head */}
                   <div className="p-6 sm:p-7 space-y-5 flex-1 flex flex-col justify-between">
@@ -141,20 +148,26 @@ export default function PortfolioSection({ lang }: PortfolioSectionProps) {
                   </div>
 
                   {/* Demo/Preview footer strip */}
-                  <div className="bg-slate-50/50 hover:bg-slate-50 px-6 sm:px-7 py-4 border-t border-slate-100 flex items-center justify-between transition-colors">
-                    <div className="flex items-center space-x-1.5 rtl:space-x-reverse text-emerald-600">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                      <span className="text-[11px] font-bold tracking-tight font-mono">
-                        {isAr ? 'حالة النظام: تشغيل كامل' : 'SYS_STATUS: LIVE'}
-                      </span>
-                    </div>
+                  <div className="bg-slate-50/50 px-6 sm:px-7 py-4 border-t border-slate-100 flex items-center justify-between transition-colors gap-3">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedProject(project);
+                        setIsDetailOpen(true);
+                      }}
+                      className="inline-flex items-center space-x-1.5 rtl:space-x-reverse text-xs font-bold text-indigo-600 hover:text-indigo-700 hover:scale-103 transition-all cursor-pointer"
+                    >
+                      <Info className="w-4 h-4" />
+                      <span>{isAr ? 'عرض التفاصيل والمقاييس' : 'View Core Case'}</span>
+                    </button>
 
                     <a
                       href={project.demoLink}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center space-x-1 rtl:space-x-reverse text-xs font-semibold text-sky-600 hover:text-sky-700 transition-colors"
+                      className="inline-flex items-center space-x-1 rtl:space-x-reverse text-xs font-bold text-sky-600 hover:text-sky-700 hover:scale-103 transition-all"
                       onClick={(e) => {
+                        e.stopPropagation(); // Avoid triggering card details modal
                         // Prevent default if we want to show a gorgeous modal or custom notification
                         // since we are inside an iframe. Let's make it a nice feedback loop.
                         e.preventDefault();
@@ -166,7 +179,7 @@ export default function PortfolioSection({ lang }: PortfolioSectionProps) {
                         window.open(project.demoLink, '_blank');
                       }}
                     >
-                      <span>{isAr ? 'رابط عرض المشروع' : 'Live Preview'}</span>
+                      <span>{isAr ? 'رابط العرض' : 'Live Preview'}</span>
                       <ArrowUpRight className="w-3.5 h-3.5" />
                     </a>
                   </div>
@@ -204,6 +217,17 @@ export default function PortfolioSection({ lang }: PortfolioSectionProps) {
         </div>
 
       </div>
+
+      {/* Expandable Case Study details modal with challenges & metrics */}
+      <ProjectDetailsModal
+        isOpen={isDetailOpen}
+        project={selectedProject}
+        onClose={() => {
+          setIsDetailOpen(false);
+          setSelectedProject(null);
+        }}
+        lang={lang}
+      />
     </section>
   );
 }

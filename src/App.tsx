@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Lang } from './types';
 import ScrollProgressBar from './components/ScrollProgressBar';
 import Navbar from './components/Navbar';
@@ -8,6 +8,7 @@ import StatsSection from './components/StatsSection';
 import ClientTrust from './components/ClientTrust';
 import SolutionsSection from './components/SolutionsSection';
 import SectorsSection from './components/SectorsSection';
+import ServicesMarket from './components/ServicesMarket';
 import AboutSection from './components/AboutSection';
 import PortfolioSection from './components/PortfolioSection';
 import FAQSection from './components/FAQSection';
@@ -21,6 +22,29 @@ export default function App() {
   const [preselectedSectorId, setPreselectedSectorId] = useState<string>('');
   const [preselectedSolutionId, setPreselectedSolutionId] = useState<string>('');
   const [isQuickHelpOpen, setIsQuickHelpOpen] = useState(false);
+
+  // Global Ctrl+K / Cmd+K listener for Quick Help Accessibility
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        const activeTag = document.activeElement?.tagName.toLowerCase();
+        const isEditable = document.activeElement?.getAttribute('contenteditable') === 'true';
+        
+        // Ignore shortcut if typing inside message fields, inputs or textareas
+        if (activeTag === 'input' || activeTag === 'textarea' || isEditable) {
+          return;
+        }
+        
+        e.preventDefault();
+        setIsQuickHelpOpen((prev) => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   const handleNavigate = (sectionId: string, customSectorId?: string, customSolutionId?: string) => {
     if (customSectorId !== undefined) {
@@ -92,6 +116,8 @@ export default function App() {
           lang={lang}
           onNavigateToConsult={handleNavigateToConsultWithSector}
         />
+
+        <ServicesMarket lang={lang} />
 
         <PortfolioSection lang={lang} />
 
