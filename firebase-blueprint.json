@@ -1,0 +1,192 @@
+{
+  "entities": {
+    "client": {
+      "title": "Client",
+      "description": "Corporate client registered space",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "Corporate electronic mail of the enterprise partner"
+        },
+        "name": {
+          "type": "string",
+          "description": "Full name of the contact representative"
+        },
+        "companyName": {
+          "type": "string",
+          "description": "Name of the partner organization"
+        },
+        "phone": {
+          "type": "string",
+          "description": "Contact telephone number"
+        },
+        "password": {
+          "type": "string",
+          "description": "Hashed or baseline password for authentication"
+        }
+      },
+      "required": [
+        "email",
+        "name",
+        "companyName",
+        "password"
+      ]
+    },
+    "request": {
+      "title": "Client Request",
+      "description": "Consultation inquiry / transformation project entry",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique record identifier"
+        },
+        "clientEmail": {
+          "type": "string",
+          "description": "Email of the associated corporate client"
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the requester"
+        },
+        "companyName": {
+          "type": "string",
+          "description": "Name of the company requesting consultation"
+        },
+        "sectorId": {
+          "type": "string",
+          "description": "Industry sector ID (banking, retail, health, government, education)"
+        },
+        "solutionId": {
+          "type": "string",
+          "description": "Primary tech solution ID"
+        },
+        "message": {
+          "type": "string",
+          "description": "Inquiry context detailing workload and timelines"
+        },
+        "phone": {
+          "type": "string",
+          "description": "Requester phone number"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "reviewing",
+            "planned",
+            "approved",
+            "completed"
+          ],
+          "description": "Lifecycle pipeline status"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Readable timestamp of creation"
+        },
+        "techStack": {
+          "type": "array",
+          "description": "Recommended software products / frameworks"
+        },
+        "timelineDays": {
+          "type": "number",
+          "description": "Estimated technical milestone days"
+        },
+        "estimatedCost": {
+          "type": "string",
+          "description": "Budgetary cost estimation"
+        }
+      },
+      "required": [
+        "id",
+        "clientEmail",
+        "name",
+        "companyName",
+        "sectorId",
+        "solutionId",
+        "message",
+        "status",
+        "createdAt"
+      ]
+    },
+    "invoice": {
+      "title": "Client Invoice",
+      "description": "Enterprise billing / advisory invoice tracker",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique invoice system key"
+        },
+        "clientEmail": {
+          "type": "string",
+          "description": "Primary linked corporate email key"
+        },
+        "titleAr": {
+          "type": "string",
+          "description": "Arabic billing outline description"
+        },
+        "titleEn": {
+          "type": "string",
+          "description": "English billing outline description"
+        },
+        "amount": {
+          "type": "string",
+          "description": "Invoiced monetary layout amount"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "paid",
+            "unpaid",
+            "overdue"
+          ],
+          "description": "Status of invoice"
+        },
+        "issueDate": {
+          "type": "string",
+          "description": "Date of billing"
+        },
+        "dueDate": {
+          "type": "string",
+          "description": "Due term final date"
+        },
+        "requestId": {
+          "type": "string",
+          "description": "Optional lookup to corresponding service request ticket ID"
+        }
+      },
+      "required": [
+        "id",
+        "clientEmail",
+        "titleAr",
+        "titleEn",
+        "amount",
+        "status",
+        "issueDate",
+        "dueDate"
+      ]
+    }
+  },
+  "firestore": {
+    "clients/{email}": {
+      "schema": {
+        "$ref": "#/entities/client"
+      },
+      "description": "Secured collection storing company partner credentials"
+    },
+    "requests/{requestId}": {
+      "schema": {
+        "$ref": "#/entities/request"
+      },
+      "description": "Consultation requests submitted by partners for technical sizing and trackers"
+    },
+    "invoices/{invoiceId}": {
+      "schema": {
+        "$ref": "#/entities/invoice"
+      },
+      "description": "Billing statements, retainer milestones, and architectural audits invoices"
+    }
+  }
+}

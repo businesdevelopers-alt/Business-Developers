@@ -26,6 +26,30 @@ export const SOLUTIONS: Solution[] = [
     detailsEn: 'We carefully evaluate existing traditional systems, then establish a long-term strategic vision focused on leveraging technologies to increase productivity, lower costs, and achieve competitive superiority.'
   },
   {
+    id: 'corporate-innovation',
+    titleAr: 'الابتكار المؤسسي',
+    titleEn: 'Corporate Innovation',
+    descriptionAr: 'انقل مؤسستك من التفكير التقليدي إلى منظومة ابتكار متكاملة تحفز التميز الريادي وتضمن التكيف المستمر.',
+    descriptionEn: 'Transition your organization from traditional execution to an integrated, sustainable innovation system fueling competitive edge.',
+    iconName: 'Lightbulb',
+    featuresAr: [
+      'تطبيق معيار ISO 56002 لإدارة الابتكار ومواءمة عمليات الابتكار مع المعايير العالمية',
+      'حوكمة الابتكار وقياس الأثر المالي والتشغيلي لضمان تحقيق أثر ملموس ومستدام',
+      'تصميم استراتيجية الابتكار المؤسسي ووضع خارطة طريق تربط الابتكار بالرؤية الكبرى',
+      'تأسيس وتشغيل معامل ومختبرات الابتكار وتصميم بيئات تجريبية داعمة للأفكار والمشاريع الريادية'
+    ],
+    featuresEn: [
+      'Implementing ISO 56002 standards aligning innovation with global quality benchmarks',
+      'Establishing robust innovation governance and measuring structural & financial impacts',
+      'Designing custom corporate innovation strategies and roadmap paths supporting core vision',
+      'Incubating and operating corporate innovation labs and sandboxes for pilot entrepreneurial sprints'
+    ],
+    impactAr: 'تسريع تحويل الأفكار الريادية لواقع تشغيلي وبناء أسلوب تنافسي ريادي يصعب محاكاته وبناء عوائق منافسة.',
+    impactEn: 'Accelerating the conversion of early ideas into solid realities and shaping resilient, inimitable competitive models.',
+    detailsAr: 'في عالم يتغيّر بسرعة فائقة، تحتاج المؤسسات والجهات إلى أكثر من مجرد أفكار عابرة... تحتاج إلى نظام أصيل يبتكر باستمرار. نحن نوفّر حزمة الابتكار المؤسسي المتكاملة التي تدعم بناء ثقافة تنظيمية مبدعة لترقية كفاءة الأداء المؤسسي، وتحسين جودة اتخاذ القرارات والخدمات، وتسريع دورة حياة الابتكارات الناجحة.',
+    detailsEn: 'In a world of constant motion, organizations need more than sporadic brainstorming—they need a continuous engine for creation. Our corporate innovation packages foster internal creative culture to heighten output and institutional adaptability.'
+  },
+  {
     id: 'technical-modernization',
     titleAr: 'التحديث التقني',
     titleEn: 'Technical Modernization',

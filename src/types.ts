@@ -70,3 +70,41 @@ export interface FAQItem {
   answerEn: string;
 }
 
+export interface Client {
+  email: string;
+  name: string;
+  companyName: string;
+  phone?: string;
+  password?: string; // stored hashed or simply for prototype auth simulation
+}
+
+export interface ClientRequest {
+  id: string;
+  clientEmail: string;
+  name: string;
+  companyName: string;
+  sectorId: string;
+  solutionId: string;
+  message: string;
+  phone?: string;
+  status: 'pending' | 'reviewing' | 'planned' | 'approved' | 'completed';
+  createdAt: string;
+  techStack?: string[];
+  timelineDays?: number;
+  estimatedCost?: string;
+}
+
+export interface ClientInvoice {
+  id: string; // e.g. "INV-4309"
+  clientEmail: string;
+  requestId?: string;
+  titleAr: string;
+  titleEn: string;
+  amount: string;
+  status: 'paid' | 'unpaid' | 'overdue';
+  issueDate: string;
+  dueDate: string;
+  bankDetailsName?: string;
+  bankDetailsIBAN?: string;
+}
+

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Lang, ContactInquiry } from '../types';
+import { Lang, ContactInquiry, Client, ClientRequest } from '../types';
 import { SECTORS, SOLUTIONS } from '../data';
 import { Send, CheckCircle2, Sparkles, Server, Terminal, HelpCircle, PhoneCall, Building, Cpu, ExternalLink, Copy, Check, Mail } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -9,9 +9,17 @@ interface ConsultationFormProps {
   lang: Lang;
   preselectedSectorId?: string;
   preselectedSolutionId?: string;
+  currentClient: Client | null;
+  onAddRequest?: (req: Omit<ClientRequest, 'id' | 'createdAt' | 'clientEmail' | 'status'>) => void;
 }
 
-export default function ConsultationForm({ lang, preselectedSectorId = '', preselectedSolutionId = '' }: ConsultationFormProps) {
+export default function ConsultationForm({ 
+  lang, 
+  preselectedSectorId = '', 
+  preselectedSolutionId = '',
+  currentClient,
+  onAddRequest
+}: ConsultationFormProps) {
   const isAr = lang === 'ar';
   
   const [formData, setFormData] = useState<ContactInquiry>({
@@ -59,6 +67,35 @@ export default function ConsultationForm({ lang, preselectedSectorId = '', prese
       setErrors(prev => ({ ...prev, solutionId: undefined }));
     }
   }, [preselectedSolutionId]);
+
+  // Synchronize authenticated partner info
+  useEffect(() => {
+    if (currentClient) {
+      setFormData(prev => ({
+        ...prev,
+        name: currentClient.name,
+        email: currentClient.email,
+        companyName: currentClient.companyName,
+        phone: currentClient.phone || prev.phone
+      }));
+      // Clear fields' errors
+      setErrors(prev => ({
+        ...prev,
+        name: undefined,
+        email: undefined,
+        companyName: undefined
+      }));
+    } else {
+      // Clear fields to let another client fill their info
+      setFormData(prev => ({
+        ...prev,
+        name: '',
+        email: '',
+        companyName: '',
+        phone: ''
+      }));
+    }
+  }, [currentClient]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -166,6 +203,21 @@ export default function ConsultationForm({ lang, preselectedSectorId = '', prese
       phases: generatedPhases,
       duration
     });
+
+    // Bubble up request submission if onAddRequest callback exists
+    if (onAddRequest) {
+      onAddRequest({
+        name: formData.name,
+        companyName: formData.companyName,
+        sectorId: formData.sectorId,
+        solutionId: formData.solutionId,
+        message: formData.message,
+        phone: formData.phone,
+        techStack: generatedStack,
+        timelineDays: sec === 'banking' || sec === 'government' ? 120 : (sol === 'ai-ml' ? 90 : 60),
+        estimatedCost: sec === 'banking' || sec === 'government' ? '320,000' : (sol === 'ai-ml' ? '220,000' : '150,000')
+      });
+    }
 
     // Elegant analysis transition
     setIsAnalyzing(true);

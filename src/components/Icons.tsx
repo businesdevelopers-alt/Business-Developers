@@ -16,7 +16,8 @@ import {
   ShoppingBag,
   Home,
   Sparkles,
-  Briefcase
+  Briefcase,
+  Lightbulb
 } from 'lucide-react';
 
 export const getIconComponent = (name: string, className?: string) => {
@@ -37,6 +38,7 @@ export const getIconComponent = (name: string, className?: string) => {
     case 'ShoppingBag': return <ShoppingBag className={className} />;
     case 'Home': return <Home className={className} />;
     case 'Sparkles': return <Sparkles className={className} />;
+    case 'Lightbulb': return <Lightbulb className={className} />;
     default: return <Briefcase className={className} />;
   }
 };

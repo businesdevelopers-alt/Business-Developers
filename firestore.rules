@@ -1,0 +1,86 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global safety net: Deny all by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() <= 64 && id.matches('^[a-zA-Z0-9_\\-\\.@]+$');
+    }
+
+    function incoming(request) {
+      return request.resource.data;
+    }
+
+    function existing(resource) {
+      return resource.data;
+    }
+
+    // Validation Blueprint for Clients
+    function isValidClient(client) {
+      return client.email is string && client.email.size() > 3 && client.email.size() <= 100
+        && client.name is string && client.name.size() > 1 && client.name.size() <= 100
+        && client.companyName is string && client.companyName.size() > 1 && client.companyName.size() <= 100
+        && client.password is string && client.password.size() >= 6 && client.password.size() <= 128;
+    }
+
+    // Validation Blueprint for Requests
+    function isValidRequest(req) {
+      return req.id is string && req.id.size() <= 16
+        && req.clientEmail is string && req.clientEmail.size() > 3 && req.clientEmail.size() <= 100
+        && req.name is string && req.name.size() > 1 && req.name.size() <= 100
+        && req.companyName is string && req.companyName.size() > 1 && req.companyName.size() <= 100
+        && req.sectorId is string && req.sectorId.size() > 1 && req.sectorId.size() <= 32
+        && req.solutionId is string && req.solutionId.size() > 1 && req.solutionId.size() <= 32
+        && req.message is string && req.message.size() <= 10000
+        && req.status is string && (req.status == 'pending' || req.status == 'reviewing' || req.status == 'planned' || req.status == 'approved' || req.status == 'completed')
+        && req.createdAt is string && req.createdAt.size() <= 32;
+    }
+
+    // Validation Blueprint for Invoices
+    function isValidInvoice(inv) {
+      return inv.id is string && inv.id.size() <= 16
+        && inv.clientEmail is string && inv.clientEmail.size() > 3 && inv.clientEmail.size() <= 100
+        && inv.titleAr is string && inv.titleAr.size() > 1 && inv.titleAr.size() <= 128
+        && inv.titleEn is string && inv.titleEn.size() > 1 && inv.titleEn.size() <= 128
+        && inv.amount is string && inv.amount.size() > 1 && inv.amount.size() <= 32
+        && inv.status is string && (inv.status == 'paid' || inv.status == 'unpaid' || inv.status == 'overdue')
+        && inv.issueDate is string && inv.issueDate.size() <= 32
+        && inv.dueDate is string && inv.dueDate.size() <= 32;
+    }
+
+    // Client profiles matchmaking
+    match /clients/{email} {
+      allow create: if isValidId(email) && isValidClient(incoming(request)) && incoming(request).email == email;
+      allow read: if isValidId(email);
+      allow update: if isValidId(email) && isValidClient(incoming(request)) && incoming(request).email == email && incoming(request).password == existing(resource).password;
+      allow delete: if false;
+    }
+
+    // Service solutions and tracker requests matchmaking
+    match /requests/{requestId} {
+      allow create: if isValidId(requestId) && isValidRequest(incoming(request)) && incoming(request).id == requestId;
+      allow read: if isValidId(requestId);
+      allow update: if isValidId(requestId) && isValidRequest(incoming(request)) 
+        && incoming(request).id == existing(resource).id
+        && incoming(request).clientEmail == existing(resource).clientEmail
+        && incoming(request).createdAt == existing(resource).createdAt;
+      allow delete: if false;
+    }
+
+    // Invoices matchmaking
+    match /invoices/{invoiceId} {
+      allow create: if isValidId(invoiceId) && isValidInvoice(incoming(request)) && incoming(request).id == invoiceId;
+      allow read: if isValidId(invoiceId);
+      allow update: if isValidId(invoiceId) && isValidInvoice(incoming(request))
+        && incoming(request).id == existing(resource).id
+        && incoming(request).clientEmail == existing(resource).clientEmail
+        && incoming(request).issueDate == existing(resource).issueDate;
+      allow delete: if false;
+    }
+  }
+}
