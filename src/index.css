@@ -1,0 +1,146 @@
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Cairo', 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  
+  --color-brand-50: #f0f7ff;
+  --color-brand-100: #e0effe;
+  --color-brand-500: #0284c7;
+  --color-brand-600: #0284c7;
+  --color-brand-700: #0369a1;
+  --color-brand-900: #0c4a6e;
+  --color-navy-950: #030712;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    font-family: var(--font-sans);
+  }
+  
+  body {
+    background-color: #fafafa;
+    color: #171717;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Neon glow grid background effect */
+.grid-bg-effect {
+  background-image: radial-gradient(rgba(2, 132, 199, 0.08) 1.5px, transparent 1.5px);
+  background-size: 24px 24px;
+}
+
+/* Multi-Page Clean PDF & Physical Printing Optimization Media Query */
+@media print {
+  /* Configure basic page settings and margins */
+  @page {
+    size: A4 portrait;
+    margin: 1.6cm 1.4cm 1.6cm 1.4cm;
+  }
+
+  /* Force solid backgrounds and deep ink-contrast outputs */
+  html, body {
+    background-color: #ffffff !important;
+    color: #111111 !important;
+    font-size: 11pt !important;
+    line-height: 1.5 !important;
+    font-print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+    scroll-behavior: auto !important;
+  }
+
+  /* Completely strip out floating interactive systems or web-only layout widgets */
+  #scroll-progress-container,
+  #scroll-progress-fill,
+  #BD-live-chat-panel,
+  #live-chat-floating-btn,
+  #success-modal-portal,
+  #success-modal-backdrop,
+  .inline-flex.items-center.space-x-1.5,
+  #newsletter,
+  #lang-toggle-desktop,
+  #chat-send-btn,
+  #chat-widget-input,
+  button,
+  a[href^="#"] {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+
+  /* Ensure elegant structure breaks across multiple sheets */
+  section, 
+  article, 
+  header, 
+  footer,
+  #clients {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    margin-bottom: 24pt !important;
+  }
+
+  /* Redecorate navigation header as a static official report title bar */
+  nav {
+    position: relative !important;
+    background-color: #ffffff !important;
+    border-bottom: 1.5px solid #e2e8f0 !important;
+    box-shadow: none !important;
+    padding: 10px 0 !important;
+  }
+
+  /* Fix grid layouts on physical medium to prevent extreme clipping */
+  .grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 12pt !important;
+    background: transparent !important;
+  }
+
+  /* Maintain distinct readability of mono snippets and references */
+  pre, code {
+    background-color: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+    color: #0f172a !important;
+    page-break-inside: avoid;
+  }
+
+  /* Optimize contrast on card layouts for standard printer ink */
+  div.bg-white, 
+  div.bg-gradient-to-r,
+  div.bg-gradient-to-br {
+    box-shadow: none !important;
+    border: 1px solid #cbd5e1 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  .text-white {
+    color: #000000 !important;
+  }
+
+  .text-slate-300, 
+  .text-slate-400, 
+  .text-slate-500 {
+    color: #475569 !important;
+  }
+}
+
