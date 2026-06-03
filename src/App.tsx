@@ -19,6 +19,7 @@ import NewsletterSubscription from './components/NewsletterSubscription';
 import Footer from './components/Footer';
 import LiveChatWidget from './components/LiveChatWidget';
 import ClientPortal from './components/ClientPortal';
+import EntrepreneurJourney from './components/EntrepreneurJourney';
 
 export default function App() {
   const [lang, setLang] = useState<Lang>('ar'); // Defaulting to Arabic as requested by user's content layout
@@ -522,6 +523,13 @@ export default function App() {
         />
 
         <ServicesMarket lang={lang} />
+
+        <EntrepreneurJourney
+          lang={lang}
+          currentClient={currentClient}
+          onAddRequest={handleAddRequest}
+          onOpenClientPortal={() => setIsClientPortalOpen(true)}
+        />
 
         <PortfolioSection lang={lang} />
 

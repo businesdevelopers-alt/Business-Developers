@@ -176,6 +176,7 @@ export default function Navbar({
     { id: 'solutions', labelAr: 'حلولنا', labelEn: 'Our Solutions' },
     { id: 'sectors', labelAr: 'قطاعات العمل', labelEn: 'Sectors' },
     { id: 'services-market', labelAr: 'سوق الخدمات', labelEn: 'Services Market' },
+    { id: 'entrepreneurship', labelAr: 'رحلة الريادة', labelEn: 'Venture Journey' },
     { id: 'portfolio', labelAr: 'أعمالنا', labelEn: 'Our Work' },
     { id: 'clients', labelAr: 'شركاؤنا', labelEn: 'Partners' },
     { id: 'about', labelAr: 'من نحن', labelEn: 'About Us' },
