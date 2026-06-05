@@ -76,6 +76,11 @@ export interface Client {
   companyName: string;
   phone?: string;
   password?: string; // stored hashed or simply for prototype auth simulation
+  avatar?: string; // e.g., 'avatar-1'
+  tier?: 'silver' | 'gold' | 'platinum'; // Partner Tier
+  industry?: string; // Company Industry
+  joinedAt?: string; // Joining date
+  bio?: string; // Company brief bio
 }
 
 export interface ClientRequest {

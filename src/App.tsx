@@ -38,14 +38,24 @@ export default function App() {
         name: 'عبد الرحمن المطلق',
         companyName: 'مجموعة المطلق القابضة',
         phone: '0501122334',
-        password: 'password123'
+        password: 'password123',
+        avatar: '🏢',
+        tier: 'gold',
+        industry: 'retail',
+        joinedAt: '01 May 2026',
+        bio: 'مجموعتنا تسعى لأتمتة كافة العمليات اللوجستية وتكامل الفروع السحابية ممتدة الفروع حول المملكة.'
       },
       {
         email: 'businesdevelopers@gmail.com',
         name: 'شريك التطوير البلانيني',
         companyName: 'مؤسسة الرواد الدولية',
         phone: '0555555555',
-        password: 'password123'
+        password: 'password123',
+        avatar: '🚀',
+        tier: 'platinum',
+        industry: 'banking',
+        joinedAt: '25 Apr 2026',
+        bio: 'ريادة الابتكار والتكامل مع الأنظمة المالية المفتوحة ونظم سداد المدفوعات الحكومية والخاصة.'
       }
     ];
   });
@@ -130,14 +140,24 @@ export default function App() {
               name: 'عبد الرحمن المطلق',
               companyName: 'مجموعة المطلق القابضة',
               phone: '0501122334',
-              password: 'password123'
+              password: 'password123',
+              avatar: '🏢',
+              tier: 'gold',
+              industry: 'retail',
+              joinedAt: '01 May 2026',
+              bio: 'مجموعتنا تسعى لأتمتة كافة العمليات اللوجستية وتكامل الفروع السحابية ممتدة الفروع حول المملكة.'
             },
             {
               email: 'businesdevelopers@gmail.com',
               name: 'شريك التطوير البلانيني',
               companyName: 'مؤسسة الرواد الدولية',
               phone: '0555555555',
-              password: 'password123'
+              password: 'password123',
+              avatar: '🚀',
+              tier: 'platinum',
+              industry: 'banking',
+              joinedAt: '25 Apr 2026',
+              bio: 'ريادة الابتكار والتكامل مع الأنظمة المالية المفتوحة ونظم سداد المدفوعات الحكومية والخاصة.'
             }
           ];
           for (const c of initialClients) {
@@ -311,7 +331,16 @@ export default function App() {
 
     try {
       const clientEmail = newClient.email.toLowerCase();
-      await setDoc(doc(db, 'clients', clientEmail), newClient).catch(err => {
+      const clientWithDefaults: Client = {
+        ...newClient,
+        avatar: newClient.avatar || '💻',
+        tier: 'silver',
+        joinedAt: new Date().toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' }),
+        bio: newClient.bio || (lang === 'ar' ? 'مؤسسة ريادية شريكة في مسيرة التحول الرقمي مع بيزنس ديفلوبرز.' : 'Enterprise partner in the digital transformation journey with Business Developers.'),
+        industry: newClient.industry || (lang === 'ar' ? 'تجارة وتوريد' : 'Trade & Supply')
+      };
+
+      await setDoc(doc(db, 'clients', clientEmail), clientWithDefaults).catch(err => {
         handleFirestoreError(err, OperationType.WRITE, `clients/${clientEmail}`);
       });
       
@@ -319,8 +348,8 @@ export default function App() {
       const welcomeRequest: ClientRequest = {
         id: `BD-${Math.floor(1000 + Math.random() * 9000)}`,
         clientEmail: clientEmail,
-        name: newClient.name,
-        companyName: newClient.companyName,
+        name: clientWithDefaults.name,
+        companyName: clientWithDefaults.companyName,
         sectorId: 'retail',
         solutionId: 'digital-transformation',
         message: lang === 'ar' 
@@ -337,7 +366,7 @@ export default function App() {
         handleFirestoreError(err, OperationType.WRITE, `requests/${welcomeRequest.id}`);
       });
 
-      setClients(prev => [...prev, newClient]);
+      setClients(prev => [...prev, clientWithDefaults]);
       setRequests(prev => [welcomeRequest, ...prev]);
 
       return { success: true };
@@ -412,6 +441,21 @@ export default function App() {
       setClients(prev => [...prev, newCl]);
     } catch (err) {
       console.error("Failed to create Client in Firestore: ", err);
+    }
+  };
+
+  const handleUpdateClient = async (updatedClient: Client) => {
+    try {
+      const clientEmail = updatedClient.email.toLowerCase();
+      await setDoc(doc(db, 'clients', clientEmail), updatedClient).catch(err => {
+        handleFirestoreError(err, OperationType.WRITE, `clients/${clientEmail}`);
+      });
+      setClients(prev => prev.map(c => c.email.toLowerCase() === clientEmail ? updatedClient : c));
+      if (currentClient && currentClient.email.toLowerCase() === clientEmail) {
+        setCurrentClient(updatedClient);
+      }
+    } catch (err) {
+      console.error("Failed to update Client in Firestore: ", err);
     }
   };
 
@@ -575,6 +619,7 @@ export default function App() {
         onUpdateRequestStatus={handleUpdateRequestStatus}
         onCreateInvoice={handleCreateInvoice}
         onCreateClient={handleCreateClient}
+        onUpdateClient={handleUpdateClient}
         onScrollToConsultation={() => handleNavigate('consultation')}
       />
     </div>

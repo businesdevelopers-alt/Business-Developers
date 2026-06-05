@@ -27,7 +27,15 @@ import {
   CreditCard,
   Database,
   Plus,
-  Eye
+  Eye,
+  Chrome,
+  RefreshCw,
+  Key,
+  Cloud,
+  CheckSquare,
+  Loader2,
+  Link2,
+  ExternalLink
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -57,6 +65,7 @@ interface ClientPortalProps {
   onUpdateRequestStatus?: (requestId: string, newStatus: ClientRequest['status']) => void;
   onCreateInvoice?: (invoice: ClientInvoice) => void;
   onCreateClient?: (client: Client) => void;
+  onUpdateClient?: (client: Client) => void;
   onScrollToConsultation: () => void;
 }
 
@@ -76,11 +85,287 @@ export default function ClientPortal({
   onUpdateRequestStatus,
   onCreateInvoice,
   onCreateClient,
+  onUpdateClient,
   onScrollToConsultation
 }: ClientPortalProps) {
   const isAr = lang === 'ar';
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
-  const [portalSubTab, setPortalSubTab] = useState<'requests' | 'invoices' | 'databases'>('requests');
+  const [portalSubTab, setPortalSubTab] = useState<'profile' | 'requests' | 'invoices' | 'databases' | 'workspace'>('profile');
+
+  // Interactive profile edits state
+  const [profName, setProfName] = useState(currentClient?.name || '');
+  const [profCompany, setProfCompany] = useState(currentClient?.companyName || '');
+  const [profPhone, setProfPhone] = useState(currentClient?.phone || '');
+  const [profPassword, setProfPassword] = useState(currentClient?.password || '');
+  const [profBio, setProfBio] = useState(currentClient?.bio || '');
+  const [profIndustry, setProfIndustry] = useState(currentClient?.industry || '');
+  const [profAvatar, setProfAvatar] = useState(currentClient?.avatar || '💻');
+  const [profSuccess, setProfSuccess] = useState('');
+  const [profError, setProfError] = useState('');
+
+  React.useEffect(() => {
+    if (currentClient) {
+      setProfName(currentClient.name || '');
+      setProfCompany(currentClient.companyName || '');
+      setProfPhone(currentClient.phone || '');
+      setProfPassword(currentClient.password || '');
+      setProfBio(currentClient.bio || '');
+      setProfIndustry(currentClient.industry || '');
+      setProfAvatar(currentClient.avatar || '💻');
+      setProfSuccess('');
+      setProfError('');
+    }
+  }, [currentClient]);
+
+  const handleProfileUpdateSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!profName || !profCompany) {
+      setProfError(isAr ? 'الرجاء ملء حقول الاسم والشركة الأساسية.' : 'Please fill in Name and Company fields.');
+      return;
+    }
+    if (onUpdateClient && currentClient) {
+      const updated: Client = {
+        ...currentClient,
+        name: profName,
+        companyName: profCompany,
+        phone: profPhone,
+        password: profPassword,
+        bio: profBio,
+        industry: profIndustry,
+        avatar: profAvatar
+      };
+      onUpdateClient(updated);
+      setProfSuccess(isAr ? 'تم تحديث وحفظ بيانات ملفك الشخصي في قاعدة Firestore السحابية بنجاح! ✓' : 'Profile updated and synchronized with cloud Firestore successfully! ✓');
+      setProfError('');
+      setTimeout(() => setProfSuccess(''), 4000);
+    }
+  };
+
+  // Google Workspace Integration states
+  const [workspaceToken, setWorkspaceToken] = useState<string | null>(() => {
+    return localStorage.getItem('bd_workspace_token') || null;
+  });
+  const [isLinkingWorkspace, setIsLinkingWorkspace] = useState(false);
+  const [workspaceError, setWorkspaceError] = useState('');
+  const [formCreationSuccess, setFormCreationSuccess] = useState('');
+  const [isCreatingForm, setIsCreatingForm] = useState(false);
+  const [createdForm, setCreatedForm] = useState<any | null>(null);
+  const [customFormId, setCustomFormId] = useState('');
+  const [selectedFormDetail, setSelectedFormDetail] = useState<any | null>(null);
+  const [formResponses, setFormResponses] = useState<any[]>([]);
+  const [isLoadingFormDetail, setIsLoadingFormDetail] = useState(false);
+  const [isLoadingResponses, setIsLoadingResponses] = useState(false);
+  
+  // Google Calendar Integration states
+  const [eventsList, setEventsList] = useState<any[]>([]);
+  const [isLoadingEvents, setIsLoadingEvents] = useState(false);
+  const [calendarSummary, setCalendarSummary] = useState('');
+  const [isBookingEvent, setIsBookingEvent] = useState(false);
+  const [bookingResponse, setBookingResponse] = useState<any | null>(null);
+
+  // Calendar Event form inputs
+  const [calSummary, setCalSummary] = useState('');
+  const [calDescription, setCalDescription] = useState('');
+  const [calDateTime, setCalDateTime] = useState('');
+  const [calDuration, setCalDuration] = useState('30');
+
+  // Sync Google Calendar Events
+  const handleFetchCalendarEvents = async () => {
+    if (!workspaceToken) return;
+    setIsLoadingEvents(true);
+    try {
+      const timeMin = new Date().toISOString();
+      const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${timeMin}&maxResults=5&orderBy=startTime&singleEvents=true`, {
+        headers: { 'Authorization': `Bearer ${workspaceToken}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCalendarSummary(data.summary || '');
+        setEventsList(data.items || []);
+      }
+    } catch (err) {
+      console.error("Failed to load events: ", err);
+    } finally {
+      setIsLoadingEvents(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (workspaceToken && portalSubTab === 'workspace') {
+      handleFetchCalendarEvents();
+    }
+  }, [workspaceToken, portalSubTab]);
+
+  const handleConnectWorkspace = async () => {
+    setIsLinkingWorkspace(true);
+    setWorkspaceError('');
+    try {
+      const { GoogleAuthProvider, signInWithPopup } = await import('firebase/auth');
+      const { auth } = await import('../firebase');
+      const provider = new GoogleAuthProvider();
+      provider.addScope('https://www.googleapis.com/auth/calendar');
+      provider.addScope('https://www.googleapis.com/auth/forms.body');
+      provider.addScope('https://www.googleapis.com/auth/forms.responses.readonly');
+      
+      const result = await signInWithPopup(auth, provider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      if (credential?.accessToken) {
+        setWorkspaceToken(credential.accessToken);
+        localStorage.setItem('bd_workspace_token', credential.accessToken);
+      } else {
+        setWorkspaceError(isAr ? 'عذراً، لم نتمكن من استلام رمز تفويض Google Auth.' : 'Failed to receive Google Auth credentials.');
+      }
+    } catch (err: any) {
+      console.error(err);
+      setWorkspaceError(isAr ? `خطأ أثناء الاتصال: ${err.message || err}` : `Connection failed: ${err.message || err}`);
+    } finally {
+      setIsLinkingWorkspace(false);
+    }
+  };
+
+  const handleDisconnectWorkspace = () => {
+    if (window.confirm(isAr ? 'هل أنت متأكد من قطع الاتصال بقنوات Google Workspace السحابية؟' : 'Are you sure you want to disconnect from Google Workspace services?')) {
+      setWorkspaceToken(null);
+      localStorage.removeItem('bd_workspace_token');
+      setCreatedForm(null);
+      setSelectedFormDetail(null);
+      setFormResponses([]);
+      setEventsList([]);
+    }
+  };
+
+  const handleCreateGoogleForm = async () => {
+    if (!workspaceToken) return;
+    setIsCreatingForm(true);
+    setWorkspaceError('');
+    setFormCreationSuccess('');
+    try {
+      const res = await fetch('https://forms.googleapis.com/v1/forms', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${workspaceToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          info: {
+            title: isAr ? `${currentClient?.companyName || 'الشركاء'} - استمارة تقييم متطلبات التحول الرقمي` : `${currentClient?.companyName || 'Partners'} - Digital Transformation Assessment`,
+            documentTitle: isAr ? 'تقييم التحول الرقمي السحابي' : 'Digital Transformation Assessment'
+          }
+        })
+      });
+      if (!res.ok) {
+        const errJson = await res.json();
+        throw new Error(errJson.error?.message || 'Error occurred while creating form');
+      }
+      const data = await res.json();
+      setCreatedForm(data);
+      setCustomFormId(data.formId);
+      setFormCreationSuccess(isAr ? 'تم إنشاء الاستمارة السحابية بنجاح على Google Drive الخاص بك! ✓' : 'Cloud intake form created successfully on your Google Drive! ✓');
+      setTimeout(() => setFormCreationSuccess(''), 5000);
+      handleFetchFormDetails(data.formId);
+    } catch (err: any) {
+      console.error(err);
+      setWorkspaceError(isAr ? `لا يمكن إنشاء الاستمارة: ${err.message}` : `Cannot create form: ${err.message}`);
+    } finally {
+      setIsCreatingForm(false);
+    }
+  };
+
+  const handleFetchFormDetails = async (targetFormId?: string) => {
+    const fId = targetFormId || customFormId;
+    if (!workspaceToken || !fId) return;
+    setIsLoadingFormDetail(true);
+    setWorkspaceError('');
+    try {
+      const res = await fetch(`https://forms.googleapis.com/v1/forms/${fId}`, {
+        headers: { 'Authorization': `Bearer ${workspaceToken}` }
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to fetch form (status ${res.status})`);
+      }
+      const data = await res.json();
+      setSelectedFormDetail(data);
+      // Fetch responses for this form as well
+      handleFetchFormResponses(fId);
+    } catch (err: any) {
+      console.error(err);
+      setWorkspaceError(isAr ? `خطأ أثناء جلب تفاصيل الاستمارة: ${err.message}` : `Failed to load form details: ${err.message}`);
+    } finally {
+      setIsLoadingFormDetail(false);
+    }
+  };
+
+  const handleFetchFormResponses = async (targetFormId?: string) => {
+    const fId = targetFormId || customFormId;
+    if (!workspaceToken || !fId) return;
+    setIsLoadingResponses(true);
+    try {
+      const res = await fetch(`https://forms.googleapis.com/v1/forms/${fId}/responses`, {
+        headers: { 'Authorization': `Bearer ${workspaceToken}` }
+      });
+      if (!res.ok) {
+        setFormResponses([]);
+        return;
+      }
+      const data = await res.json();
+      setFormResponses(data.responses || []);
+    } catch (err: any) {
+      console.error(err);
+      setFormResponses([]);
+    } finally {
+      setIsLoadingResponses(false);
+    }
+  };
+
+  const handleBookCalendarEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!workspaceToken || !calSummary || !calDateTime) return;
+    setIsBookingEvent(true);
+    setWorkspaceError('');
+    try {
+      const startDT = new Date(calDateTime);
+      const endDT = new Date(startDT.getTime() + parseInt(calDuration) * 60 * 1000);
+      
+      const payload = {
+        summary: calSummary,
+        description: calDescription || (isAr ? 'جلسة تقييم وتخطيط الشراكة الرقمية المصنفة' : 'Corporate digital advisory and diagnostic review.'),
+        start: {
+          dateTime: startDT.toISOString(),
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+        },
+        end: {
+          dateTime: endDT.toISOString(),
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+        }
+      };
+
+      const res = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${workspaceToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        throw new Error(`Failed to insert calendar event (status ${res.status})`);
+      }
+      const data = await res.json();
+      setBookingResponse(data);
+      setCalSummary('');
+      setCalDescription('');
+      setCalDateTime('');
+      // Refresh event list
+      handleFetchCalendarEvents();
+      setTimeout(() => setBookingResponse(null), 6000);
+    } catch (err: any) {
+      console.error(err);
+      setWorkspaceError(isAr ? `خطأ أثناء حجز الموعد: ${err.message}` : `Booking failed: ${err.message}`);
+    } finally {
+      setIsBookingEvent(false);
+    }
+  };
 
   const parseAmount = (val: string | undefined): number => {
     if (!val) return 0;
@@ -1440,22 +1725,40 @@ export default function ClientPortal({
                     </div>
 
                     {/* Toggle Selector Button Group */}
-                    <div className="flex p-1 bg-slate-950 rounded-xl border border-slate-855 font-sans">
+                    <div className="flex flex-wrap p-1 bg-slate-950 rounded-xl border border-slate-800 font-sans gap-1 sm:gap-0 font-sans">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPortalSubTab('profile');
+                          setExpandedRequestId(null);
+                        }}
+                        className={`flex-1 min-w-[80px] py-2 text-center text-[11px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                          portalSubTab === 'profile'
+                            ? 'bg-sky-500 text-slate-950 shadow-sm font-black'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <User className="w-3.5 h-3.5" />
+                        <span>
+                          {isAr ? 'الملف الشخصي' : 'Settings'}
+                        </span>
+                      </button>
+
                       <button
                         type="button"
                         onClick={() => {
                           setPortalSubTab('requests');
                           setExpandedRequestId(null);
                         }}
-                        className={`flex-1 py-1.5 text-center text-xs font-bold rounded-md transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                        className={`flex-1 min-w-[80px] py-2 text-center text-[11px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${
                           portalSubTab === 'requests'
                             ? 'bg-sky-500 text-slate-950 shadow-sm font-black'
-                            : 'text-slate-400 hover:text-slate-205'
+                            : 'text-slate-400 hover:text-white'
                         }`}
                       >
                         <FileText className="w-3.5 h-3.5" />
                         <span>
-                          {isAr ? 'الطلبات والدراسات' : 'Inquiries & Sizing'}
+                          {isAr ? 'الطلبات والاستشارات' : 'Inquiries'}
                         </span>
                       </button>
 
@@ -1465,15 +1768,15 @@ export default function ClientPortal({
                           setPortalSubTab('invoices');
                           setExpandedRequestId(null);
                         }}
-                        className={`flex-1 py-1.5 text-center text-xs font-bold rounded-md transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                        className={`flex-1 min-w-[80px] py-2 text-center text-[11px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${
                           portalSubTab === 'invoices'
                             ? 'bg-sky-500 text-slate-950 shadow-sm font-black'
-                            : 'text-slate-400 hover:text-slate-205'
+                            : 'text-slate-400 hover:text-white'
                         }`}
                       >
                         <Receipt className="w-3.5 h-3.5" />
                         <span>
-                          {isAr ? 'الفواتير والمدفوعات' : 'Invoices & Billing'}
+                          {isAr ? 'الفواتير والمدفوعات' : 'Billing'}
                         </span>
                       </button>
 
@@ -1483,18 +1786,273 @@ export default function ClientPortal({
                           setPortalSubTab('databases');
                           setExpandedRequestId(null);
                         }}
-                        className={`flex-1 py-1.5 text-center text-xs font-bold rounded-md transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                        className={`flex-1 min-w-[80px] py-2 text-center text-[11px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${
                           portalSubTab === 'databases'
                             ? 'bg-sky-500 text-slate-950 shadow-sm font-black'
-                            : 'text-slate-400 hover:text-slate-205'
+                            : 'text-slate-400 hover:text-white'
                         }`}
                       >
                         <Database className="w-3.5 h-3.5" />
                         <span>
-                          {isAr ? 'قواعد البيانات' : 'Cloud Databases'}
+                          {isAr ? 'قواعد البيانات' : 'Databases'}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPortalSubTab('workspace');
+                          setExpandedRequestId(null);
+                        }}
+                        className={`flex-1 min-w-[80px] py-2 text-center text-[11px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                          portalSubTab === 'workspace'
+                            ? 'bg-sky-500 text-slate-950 shadow-sm font-black'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <Cloud className="w-3.5 h-3.5 font-bold" />
+                        <span className="flex items-center gap-1">
+                          {isAr ? 'قنوات Google' : 'Google Sync'}
                         </span>
                       </button>
                     </div>
+
+                    {portalSubTab === 'profile' && currentClient && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="space-y-6"
+                      >
+                        <div className="flex items-center justify-between border-b border-slate-800 pb-2 font-sans">
+                          <h5 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-sky-400 animate-pulse" />
+                            <span>{isAr ? 'إدارة وتخصيص الملف الشخصي والشراكة' : 'Manage Profile & Modernization Plan'}</span>
+                          </h5>
+                          <span className="text-[10px] bg-sky-500/10 text-sky-400 font-mono px-2 py-0.5 rounded font-bold">
+                            {isAr ? 'إعدادات آمنة' : 'SECURE CONFIG'}
+                          </span>
+                        </div>
+
+                        {profSuccess && (
+                          <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 text-center flex items-center justify-center gap-2 font-bold">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                            <span>{profSuccess}</span>
+                          </div>
+                        )}
+
+                        {profError && (
+                          <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-400 text-center flex items-center justify-center gap-2">
+                            <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                            <span>{profError}</span>
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                          {/* Left Panel: Stats and Badge Card */}
+                          <div className="space-y-4 md:col-span-1">
+                            {/* Card 1: Avatar & Partner Tier */}
+                            <div className="p-5 rounded-2xl bg-slate-950/80 border border-slate-850 text-center space-y-4">
+                              <div className="relative w-20 h-20 mx-auto bg-slate-900 border border-slate-800 rounded-3xl flex items-center justify-center text-4xl shadow-md">
+                                <span>{profAvatar}</span>
+                              </div>
+
+                              <div className="space-y-1">
+                                <h4 className="text-white font-bold text-sm tracking-tight">{profName || currentClient.name}</h4>
+                                <p className="text-[11px] text-slate-400 font-mono">{currentClient.email}</p>
+                              </div>
+
+                              {/* Corporate Partner Tier Gradient Badge */}
+                              <div className="pt-2">
+                                {((currentClient.tier === 'platinum') || (totalEstimatedBudget >= 300000)) ? (
+                                  <div className="p-3.5 rounded-xl bg-gradient-to-tr from-indigo-600 via-sky-600 to-indigo-700 text-white space-y-1 shadow-md">
+                                    <span className="text-[9px] uppercase tracking-widest font-black block text-indigo-300">
+                                      {isAr ? 'فئة الشريك الماسي' : 'PLATINUM PARTNER'}
+                                    </span>
+                                    <p className="text-[10px] font-bold">
+                                      {isAr ? 'أولوية 1 الاستشارية ونشر الحلول الذكية' : 'Priority 1 Architect Service'}
+                                    </p>
+                                  </div>
+                                ) : ((currentClient.tier === 'gold') || (totalEstimatedBudget >= 100000)) ? (
+                                  <div className="p-3.5 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-600 text-slate-950 space-y-1 shadow-md">
+                                    <span className="text-[9px] uppercase tracking-widest font-black block text-amber-950">
+                                      {isAr ? 'فئة الشريك الذهبي' : 'GOLD PARTNER'}
+                                    </span>
+                                    <p className="text-[10px] font-black">
+                                      {isAr ? 'أولوية 2 ونقل الكفاءات المتسارعة' : 'Priority 2 Engineering Lead'}
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <div className="p-3.5 rounded-xl bg-gradient-to-tr from-slate-800 to-slate-700 text-slate-100 space-y-1">
+                                    <span className="text-[9px] uppercase tracking-widest font-bold block text-slate-300">
+                                      {isAr ? 'فئة الشريك الفضي' : 'SILVER PARTNER'}
+                                    </span>
+                                    <p className="text-[10px]">
+                                      {isAr ? 'متابعة وتحديث المعايير التقنية القياسية' : 'Standard Advisory Access'}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="border-t border-slate-900 pt-3 text-[11px] text-slate-500">
+                                <span>{isAr ? `تاريخ الانضمام: ${currentClient.joinedAt || '01 May 2026'}` : `Joined: ${currentClient.joinedAt || '01 May 2026'}`}</span>
+                              </div>
+                            </div>
+
+                            {/* Card 2: Interactive Avatar Picker */}
+                            <div className="p-4 rounded-2xl bg-slate-950/40 border border-slate-900 space-y-2.5">
+                              <label className="text-slate-400 text-[10px] font-bold block text-center uppercase tracking-wider">
+                                {isAr ? 'اختر رمز ممثل المنشأة' : 'Corporate Identity Avatar'}
+                              </label>
+                              <div className="flex justify-center gap-2 flex-wrap">
+                                {['🏢', '🚀', '💻', '📊', '🛡️', '🔬', '🌐', '📡'].map((av) => (
+                                  <button
+                                    key={av}
+                                    type="button"
+                                    onClick={() => setProfAvatar(av)}
+                                    className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg hover:scale-110 active:scale-95 transition-all cursor-pointer ${
+                                      profAvatar === av
+                                        ? 'bg-sky-500 border border-sky-400 shadow shadow-sky-500/25 scale-105'
+                                        : 'bg-slate-900 border border-slate-800 hover:border-slate-650'
+                                    }`}
+                                  >
+                                    {av}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Card 3: Cloud API Connection Statuses */}
+                            <div className="p-4 rounded-2xl bg-slate-950/40 border border-slate-900 space-y-3 font-sans">
+                              <span className="text-slate-400 text-[10px] font-extrabold uppercase tracking-widest block">
+                                {isAr ? 'خدمات السحابة والمزامنة' : 'Cloud Integration Status'}
+                              </span>
+                              <div className="space-y-2 text-xs">
+                                <div className="flex items-center justify-between p-2 rounded bg-slate-900/60 border border-slate-800/40 leading-none">
+                                  <span className="text-slate-400">Google Drive SDK</span>
+                                  <span className="text-emerald-400 font-bold font-mono">ACTIVE (Drive API)</span>
+                                </div>
+                                <div className="flex items-center justify-between p-2 rounded bg-slate-900/60 border border-slate-800/40 leading-none">
+                                  <span className="text-slate-400">Google Calendar SDK</span>
+                                  <span className="text-emerald-400 font-bold font-mono">CONNECTED</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Right Panel: Complete Profile Edit Form */}
+                          <div className="md:col-span-2 text-right ltr:text-left">
+                            <form onSubmit={handleProfileUpdateSubmit} className="space-y-4">
+                              <div className="p-5 rounded-2xl bg-slate-950/80 border border-slate-850 space-y-4">
+                                <h4 className="text-white font-bold text-xs uppercase tracking-wider border-b border-slate-900 pb-2.5">
+                                  {isAr ? 'تفاصيل الاتصال والمنشأة' : 'Company Coordination & Representative Details'}
+                                </h4>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                  <div className="space-y-1.5">
+                                    <label className="text-slate-400 text-[11px] font-semibold block">
+                                      {isAr ? 'الاسم بالكامل' : 'Full Name'}
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={profName}
+                                      onChange={(e) => setProfName(e.target.value)}
+                                      className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2.5 px-3.5 text-white text-xs focus:border-sky-500 outline-none transition-colors"
+                                      placeholder="e.g., عبد الرحمن المطلق"
+                                      required
+                                    />
+                                  </div>
+
+                                  <div className="space-y-1.5">
+                                    <label className="text-slate-400 text-[11px] font-semibold block">
+                                      {isAr ? 'رقم جوال الاتصال بالمنشأة' : 'Contact Phone Number'}
+                                    </label>
+                                    <input
+                                      type="tel"
+                                      value={profPhone}
+                                      onChange={(e) => setProfPhone(e.target.value)}
+                                      className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2.5 px-3.5 text-white text-xs focus:border-sky-500 outline-none transition-colors"
+                                      placeholder="05xxxxxxx"
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                  <div className="space-y-1.5">
+                                    <label className="text-slate-400 text-[11px] font-semibold block">
+                                      {isAr ? 'اسم الجهة أو المنشأة المعتمدة' : 'Official Registered Corporation'}
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={profCompany}
+                                      onChange={(e) => setProfCompany(e.target.value)}
+                                      className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2.5 px-3.5 text-white text-xs focus:border-sky-500 outline-none transition-colors font-sans"
+                                      placeholder="e.g., شركة المبتكرين المحدودة"
+                                      required
+                                    />
+                                  </div>
+
+                                  <div className="space-y-1.5">
+                                    <label className="text-slate-400 text-[11px] font-semibold block">
+                                      {isAr ? 'مجال أو قطاع أعمال المنشأة' : 'Corporate Target Industry'}
+                                    </label>
+                                    <select
+                                      value={profIndustry}
+                                      onChange={(e) => setProfIndustry(e.target.value)}
+                                      className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2.5 px-3.5 text-white text-xs focus:border-sky-500 outline-none transition-colors font-sans"
+                                    >
+                                      <option value="retail">{isAr ? 'التجزئة والتجارة الذكية' : 'Retail & Smart Commerce'}</option>
+                                      <option value="banking">{isAr ? 'الخدمات المالية والبنكية' : 'Financial Services & Banking'}</option>
+                                      <option value="government">{isAr ? 'الخدمات اللوجستية والحكومة الإلكترونية' : 'Digital Gov & Logistics'}</option>
+                                      <option value="industrial">{isAr ? 'الصناعة والرقابة المؤتمتة' : 'Industrial IoT & Automation'}</option>
+                                      <option value="health">{isAr ? 'الرعاية الصحية الحيوية' : 'Healthcare Tech'}</option>
+                                      <option value="other">{isAr ? 'قطاعات حيوية أخرى' : 'Other Vital Sectors'}</option>
+                                    </select>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                  <label className="text-slate-400 text-[11px] font-semibold block">
+                                    {isAr ? 'نبذة تعريفية وتطلعات الشراكة التقنية' : 'Company Strategic Transformation Objectives'}
+                                  </label>
+                                  <textarea
+                                    value={profBio}
+                                    onChange={(e) => setProfBio(e.target.value)}
+                                    rows={3}
+                                    className="w-full bg-slate-905 bg-slate-900 border border-slate-800 rounded-xl py-2.5 px-3.5 text-white text-xs focus:border-sky-500 outline-none transition-colors leading-relaxed font-sans text-right rtl:text-right ltr:text-left"
+                                    placeholder={isAr ? 'مثال: نهدف لتطوير البنية الهيكلية لزيادة الموثوقية...' : 'Define core objectives...'}
+                                  />
+                                </div>
+
+                                <div className="space-y-1.5 border-t border-slate-900 pt-4">
+                                  <label className="text-slate-400 text-[11px] font-semibold block">
+                                    {isAr ? 'تأمين كلمة المرور (أدخل كلمة مرور جديدة للتغيير)' : 'Security Profile Password update'}
+                                  </label>
+                                  <div className="relative">
+                                    <Lock className="absolute top-1/2 -translate-y-1/2 left-3 text-slate-600 w-4 h-4" />
+                                    <input
+                                      type="password"
+                                      value={profPassword}
+                                      onChange={(e) => setProfPassword(e.target.value)}
+                                      className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2.5 pl-9 pr-3 text-white text-xs focus:border-sky-500 outline-none transition-colors"
+                                      placeholder="••••••••"
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="pt-4 flex flex-col sm:flex-row gap-3">
+                                  <button
+                                    type="submit"
+                                    className="flex-1 py-3 px-4 rounded-xl bg-sky-400 hover:bg-sky-500 text-slate-950 font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-sky-950/20"
+                                  >
+                                    <span>{isAr ? 'حفظ تحديثات الشراكة ومزامنة السحابة ➔' : 'Update Profile & Cloud Sync ➔'}</span>
+                                  </button>
+                                </div>
+                              </div>
+                            </form>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
 
                     {portalSubTab === 'requests' ? (
                       <div className="space-y-3">
@@ -2053,7 +2611,7 @@ export default function ClientPortal({
                           </div>
                         )}
                       </div>
-                    ) : (
+                    ) : portalSubTab === 'databases' ? (
                       <div className="space-y-4 font-sans text-right rtl:text-right ltr:text-left">
                         {/* Title bar with database status */}
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-900 pb-3">
@@ -2487,7 +3045,428 @@ export default function ClientPortal({
                           </div>
                         )}
                       </div>
-                    )}
+                    ) : portalSubTab === 'workspace' ? (
+                      <div className="space-y-6 font-sans text-right rtl:text-right ltr:text-left">
+                        {/* Tab header */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-900 pb-3">
+                          <div>
+                            <h5 className="text-xs sm:text-sm font-extrabold text-white flex items-center gap-1.5 justify-start rtl:justify-end">
+                              <Cloud className="w-4 h-4 text-sky-450 animate-pulse" />
+                              <span>{isAr ? 'منصة الربط السحابي ومزامنة Google Workspace' : 'Google Workspace Cloud Hub'}</span>
+                            </h5>
+                            <p className="text-[10px] text-slate-500 mt-0.5">
+                              {isAr 
+                                ? 'أتمتة الاستمارات، جدولة الاستشارات، وسحب الردود والتقارير سحابياً.' 
+                                : 'Automate intake forms, schedule calendars, and sync submissions in real-time.'}
+                            </p>
+                          </div>
+                          
+                          {workspaceToken ? (
+                            <div className="flex items-center gap-2 self-start sm:self-center">
+                              <div className="inline-flex items-center gap-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider font-mono">
+                                <span className="w-1.5 h-1.5 bg-emerald-450 rounded-full animate-ping" />
+                                <span>{isAr ? 'متصل بـ Google' : 'ACTIVE CONNECTION'}</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={handleDisconnectWorkspace}
+                                className="px-2 py-1 rounded bg-red-500/10 hover:bg-red-500/20 text-red-450 text-[10px] font-bold border border-red-550/10 cursor-pointer transition-colors"
+                              >
+                                {isAr ? 'قطع الاتصال' : 'Disconnect'}
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="inline-flex items-center gap-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider font-mono self-start sm:self-center">
+                              <span>{isAr ? 'غير متصل (OAuth)' : 'DISCONNECTED (OAuth)'}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {workspaceError && (
+                          <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-400 text-center flex items-center justify-center gap-2">
+                            <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                            <span>{workspaceError}</span>
+                          </div>
+                        )}
+
+                        {!workspaceToken ? (
+                          /* Onboarding connection box */
+                          <div className="p-6 sm:p-8 rounded-2xl border border-dashed border-slate-800 text-center space-y-4 bg-slate-950/25 max-w-xl mx-auto">
+                            <div className="w-12 h-12 bg-sky-500/10 border border-sky-500/20 rounded-2xl flex items-center justify-center text-sky-400 mx-auto">
+                              <Cloud className="w-6 h-6 animate-bounce" />
+                            </div>
+                            <div className="space-y-1">
+                              <h6 className="text-sm font-extrabold text-white">
+                                {isAr ? 'ربط وتفعيل قنوات Google Workspace' : 'Authorize Workspace Integrations'}
+                              </h6>
+                              <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
+                                {isAr 
+                                  ? 'يتطلب مكاملة Google Forms وGoogle Calendar ربط حساب المطورين الخاص بك بشكل آمن لمنح التطبيق تذاكر اتصال مشفرة ومحدودة الصلاحية.'
+                                  : 'Connect your corporate Google Account via secure OAuth popup to sync intake templates, explore form responses, and reserve event slots.'}
+                              </p>
+                            </div>
+
+                            {/* Standard gsi-material-button styling format */}
+                            <button
+                              type="button"
+                              onClick={handleConnectWorkspace}
+                              disabled={isLinkingWorkspace}
+                              className="mt-2 mx-auto inline-flex items-center gap-2 px-5 py-2.5 bg-white text-slate-900 hover:bg-slate-100 rounded-xl text-xs font-black shadow-lg transition-all transform hover:scale-102 active:scale-98 disabled:opacity-50 cursor-pointer"
+                            >
+                              {isLinkingWorkspace ? (
+                                <Loader2 className="w-4 h-4 animate-spin text-slate-705" />
+                              ) : (
+                                <Chrome className="w-4.5 h-4.5 text-red-550" />
+                              )}
+                              <span>
+                                {isAr ? 'المزامنة والاتصال عبر حساب Google' : 'Authenticate with Google account'}
+                              </span>
+                            </button>
+                          </div>
+                        ) : (
+                          /* Live active dashboard controller */
+                          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+                            
+                            {/* LEFT SIDE COLUMN: GOOGLE FORMS HUB (7/12 cols) */}
+                            <div className="lg:col-span-12 xl:col-span-7 space-y-4">
+                              <div className="p-5 rounded-2xl bg-slate-950/70 border border-slate-850 space-y-4">
+                                <div className="flex items-center justify-between border-b border-slate-900 pb-2.5">
+                                  <h6 className="text-[12px] font-extrabold text-white uppercase tracking-wider flex items-center gap-2">
+                                    <CheckSquare className="w-4 h-4 text-sky-400" />
+                                    <span>{isAr ? 'إدارة استمارات Google Forms' : 'Google Forms Orchestrator'}</span>
+                                  </h6>
+                                  {isCreatingForm && (
+                                    <span className="text-[10px] text-sky-400 font-bold flex items-center gap-1 animate-pulse">
+                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                      {isAr ? 'جاري الإنشاء في Drive...' : 'Spinning up on Drive...'}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <p className="text-xs text-slate-400 leading-relaxed">
+                                  {isAr
+                                    ? 'أنشئ استبانات فحص تقني رقمي متكاملة لعملائك ومؤسستك بشكل حي، وتحقق من الحقول والردود مباشرة من شاشتك الاستشارية.'
+                                    : 'Create and deploy fully custom technical diagnostic intakes to gather inputs from potential partners, or review ongoing responses.'}
+                                </p>
+
+                                {formCreationSuccess && (
+                                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-400 text-center font-bold">
+                                    {formCreationSuccess}
+                                  </div>
+                                )}
+
+                                {/* Action Buttons */}
+                                <div className="flex flex-wrap gap-2.5">
+                                  <button
+                                    type="button"
+                                    onClick={handleCreateGoogleForm}
+                                    disabled={isCreatingForm}
+                                    className="px-4 py-2 bg-sky-500 hover:bg-sky-450 disabled:bg-sky-950 disabled:text-slate-500 text-slate-950 font-black text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                                  >
+                                    <Plus className="w-3.5 h-3.5 font-bold" />
+                                    <span>{isAr ? 'إنشاء نموذج استشارة سحابي جديد' : 'Generate Consultation Form'}</span>
+                                  </button>
+                                  
+                                  {customFormId && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleFetchFormDetails()}
+                                      disabled={isLoadingFormDetail}
+                                      className="px-3 py-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                                    >
+                                      <RefreshCw className={`w-3.5 h-3.5 ${isLoadingFormDetail ? 'animate-spin' : ''}`} />
+                                      <span>{isAr ? 'سحب التفاصيل والردود' : 'Sync Status & Responses'}</span>
+                                    </button>
+                                  )}
+                                </div>
+
+                                {/* Form Inspection details if exists */}
+                                {createdForm && (
+                                  <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-850 space-y-2 text-xs font-mono">
+                                    <div className="flex justify-between items-center text-[10px] border-b border-slate-850 pb-1.5">
+                                      <span className="text-slate-500">{isAr ? 'ملف النموذج السحابي' : 'Form Cloud Identity'}</span>
+                                      <span className="text-sky-400 font-bold select-all">{createdForm.formId}</span>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3 text-[10px] text-slate-400 text-right">
+                                      <div>
+                                        <span className="text-[9px] text-slate-500 block">{isAr ? 'عنوان المستند' : 'Title'}</span>
+                                        <span className="font-sans text-white font-bold block truncate">{createdForm.info?.title}</span>
+                                      </div>
+                                      <div>
+                                        <span className="text-[9px] text-slate-500 block">{isAr ? 'رابط المشاركة المفتوح' : 'Publish URL'}</span>
+                                        <a 
+                                          href={createdForm.responderUri} 
+                                          target="_blank" 
+                                          rel="noreferrer" 
+                                          className="text-emerald-400 hover:underline font-sans flex items-center gap-1 truncate"
+                                        >
+                                          <span>{isAr ? 'رابط الاستمارة' : 'Open Link'}</span>
+                                          <ExternalLink className="w-3 h-3 text-emerald-400 shrink-0" />
+                                        </a>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Manual Form ID entry and checking */}
+                                <div className="space-y-2 pt-2 border-t border-slate-900">
+                                  <label className="text-[10px] text-slate-450 font-bold block">
+                                    {isAr ? 'فحص نموذج عبر معرّف مخصص (Form ID)' : 'Inspect Existing Google Form by ID'}
+                                  </label>
+                                  <div className="flex gap-2">
+                                    <input
+                                      type="text"
+                                      value={customFormId}
+                                      onChange={(e) => setCustomFormId(e.target.value)}
+                                      placeholder="e.g. 1AdBfSR9-..."
+                                      className="flex-1 bg-slate-950 border border-slate-850 rounded-xl py-2 px-3 text-white text-xs outline-none focus:border-sky-505 transition-all font-mono"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleFetchFormDetails()}
+                                      disabled={!customFormId || isLoadingFormDetail}
+                                      className="px-3.5 py-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-sky-405 text-xs font-bold rounded-xl cursor-pointer transition-all disabled:opacity-50"
+                                    >
+                                      {isAr ? 'فحص البنية ➔' : 'Inspect Form ➔'}
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Form Fields Structure Display */}
+                                {selectedFormDetail && (
+                                  <div className="pt-3 border-t border-slate-900 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                                        {isAr ? 'الحقول والأسئلة المفهرسة' : 'Form Structured Input Areas'}
+                                      </span>
+                                      <span className="text-[10.5px] font-mono font-bold bg-slate-900 px-2 py-0.5 border border-slate-850 text-slate-350 rounded">
+                                        {selectedFormDetail.items?.length || 0} {isAr ? 'سؤال/عنصر' : 'items'}
+                                      </span>
+                                    </div>
+
+                                    {/* Scrollable inputs structure breakdown */}
+                                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                                      {selectedFormDetail.items && selectedFormDetail.items.length > 0 ? (
+                                        selectedFormDetail.items.map((it: any, idx: number) => (
+                                          <div key={idx} className="p-2.5 rounded-lg bg-slate-905 border border-slate-850/60 flex items-center justify-between gap-3 text-[11px] text-right">
+                                            <div className="min-w-0 text-right">
+                                              <span className="text-[10px] text-slate-500 font-mono block">Item #{idx+1}</span>
+                                              <p className="font-bold text-white truncate">{it.title || (isAr ? '(بدون عنوان)' : '(Untitled field)')}</p>
+                                            </div>
+                                            <span className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 font-mono text-[9px] text-slate-400 shrink-0 uppercase">
+                                              {it.questionItem ? 'QUESTION' : 'LAYOUT'}
+                                            </span>
+                                          </div>
+                                        ))
+                                      ) : (
+                                        <p className="text-[10px] text-slate-500 italic text-center py-2">
+                                          {isAr ? 'لا تحتوي هذه الاستمارة على أسئلة حتى الآن، يمكنك إدارتها وتخصيصها عبر الرابط.' : 'No active question nodes defined inside this form shell yet.'}
+                                        </p>
+                                      )}
+                                    </div>
+
+                                    {/* Form Submissions responses analysis */}
+                                    <div className="pt-3 border-t border-slate-900 space-y-3">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-[10px] text-slate-405 font-bold uppercase tracking-wider">
+                                          {isAr ? 'ردود واستجابات الشركاء المتوفرة' : 'Active Form Respondent Submissions'}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleFetchFormResponses()}
+                                          disabled={isLoadingResponses}
+                                          className="text-[10px] text-sky-400 hover:underline font-bold flex items-center gap-1 cursor-pointer"
+                                        >
+                                          <RefreshCw className={`w-3 h-3 ${isLoadingResponses ? 'animate-spin' : ''}`} />
+                                          <span>{isAr ? 'تحديث الردود' : 'Sync Responses'}</span>
+                                        </button>
+                                      </div>
+
+                                      <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                                        {isLoadingResponses ? (
+                                          <p className="text-[10px] text-slate-500 text-center py-4">{isAr ? 'جاري جلب ردود الاستمارات المكتملة...' : 'Fetching live responders metadata...'}</p>
+                                        ) : formResponses && formResponses.length > 0 ? (
+                                          formResponses.map((rep: any, idx: number) => (
+                                            <div key={idx} className="p-3 rounded-xl bg-slate-900/80 border border-slate-850 space-y-1.5 text-xs text-right">
+                                              <div className="flex justify-between gap-2 text-[10px] text-slate-550 font-mono font-bold">
+                                                <span>{isAr ? `رد رقم ${idx+1}` : `Resp #${idx+1}`}</span>
+                                                <span>{new Date(rep.lastSubmittedTime).toLocaleString(isAr ? 'ar-SA' : 'en-US')}</span>
+                                              </div>
+                                              <div className="text-[11px] text-white">
+                                                <span className="text-slate-500 block text-[9px]">{isAr ? 'معرّف الرد الفريد' : 'Response Token'}</span>
+                                                <span className="font-mono text-sky-400 font-semibold select-all">{rep.responseId}</span>
+                                              </div>
+                                            </div>
+                                          ))
+                                        ) : (
+                                          <div className="p-5 rounded-xl border border-dashed border-slate-850 text-center text-slate-500 text-[11px] italic">
+                                            {isAr ? 'لم يقم أي شريك بملء هذه الاستمارة بعد.' : 'No customer response logs found for this intake ID.'}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                  </div>
+                                )}
+
+                              </div>
+                            </div>
+
+                            {/* RIGHT SIDE COLUMN: GOOGLE CALENDAR (5/12 cols) */}
+                            <div className="lg:col-span-12 xl:col-span-5 space-y-4 text-right">
+                              
+                              {/* Calendar upcoming events bucket */}
+                              <div className="p-5 rounded-2xl bg-slate-950/70 border border-slate-850 space-y-3.5">
+                                <div className="flex items-center justify-between border-b border-slate-900 pb-2.5 font-sans">
+                                  <h6 className="text-[12px] font-extrabold text-white uppercase tracking-wider flex items-center gap-1.5">
+                                    <Calendar className="w-4 h-4 text-emerald-400" />
+                                    <span>{isAr ? 'مواعيد الاستشارات والجدولة' : 'Advisory Slots Sync'}</span>
+                                  </h6>
+                                  {isLoadingEvents && <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-450" />}
+                                </div>
+
+                                <p className="text-[11px] text-slate-400 leading-relaxed">
+                                  {isAr 
+                                    ? 'تتم مزامنة هذه الحجوزات مع تقويم Google Calendar المعتمد لمنشأتك لعرض وحجز أحدث جلسات التحول والمشورة التقنية.'
+                                    : 'Live calendar slot matrices connected directly with your primary calendar to enforce diagnostic sessions.'}
+                                </p>
+
+                                {calendarSummary && (
+                                  <div className="text-[10px] text-slate-400 font-bold bg-slate-900 p-2 border border-slate-850 rounded-xl truncate flex items-center gap-1 font-mono">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                                    <span>{isAr ? `التقويم النشط: ${calendarSummary}` : `Active Google Cal: ${calendarSummary}`}</span>
+                                  </div>
+                                )}
+
+                                <div className="space-y-2 max-h-64 overflow-y-auto pr-1 pt-1 text-right">
+                                  {eventsList && eventsList.length > 0 ? (
+                                    eventsList.map((ev: any, idx: number) => {
+                                      const startStr = ev.start?.dateTime || ev.start?.date;
+                                      const formattedDT = startStr ? new Date(startStr).toLocaleString(isAr ? 'ar-SA' : 'en-US', {
+                                        month: 'short',
+                                        day: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                      }) : '';
+                                      
+                                      return (
+                                        <div key={idx} className="p-3 rounded-xl bg-slate-900 border border-slate-850 space-y-1 hover:border-slate-800 transition-colors text-right">
+                                          <div className="flex justify-between items-center gap-3">
+                                            <span className="text-[11px] font-bold text-white truncate">{ev.summary || (isAr ? 'جلسة تقييم بدون عنوان' : 'Untitled session')}</span>
+                                            {ev.htmlLink && (
+                                              <a href={ev.htmlLink} target="_blank" rel="noreferrer" className="text-[10px] text-sky-400 shrink-0 hover:underline font-mono">
+                                                {isAr ? 'عرض' : 'View'}
+                                              </a>
+                                            )}
+                                          </div>
+                                          <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+                                            <span>{formattedDT}</span>
+                                            {ev.location && <span className="truncate max-w-[120px] text-right">{ev.location}</span>}
+                                          </div>
+                                        </div>
+                                      );
+                                    })
+                                  ) : (
+                                    <div className="text-center py-6 text-slate-500 text-xs italic">
+                                      {isAr ? 'لا توجد مواعيد وجلسات قادمة مجدولة.' : 'No upcoming diagnostic appointments booked.'}
+                                    </div>
+                                  )}
+                                </div>
+
+                              </div>
+
+                              {/* Book New Event form */}
+                              <div className="p-5 rounded-2xl bg-slate-950/70 border border-slate-850 space-y-4 text-right">
+                                <h6 className="text-[12px] font-extrabold text-white uppercase tracking-wider flex items-center gap-1.5">
+                                  <Clock className="w-4 h-4 text-sky-450 animate-pulse" />
+                                  <span>{isAr ? 'حجز وجدولة استشارة فورية' : 'Book Immediate Advisory Consultation'}</span>
+                                </h6>
+
+                                {bookingResponse && (
+                                  <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-[11px] text-emerald-405 font-bold text-center leading-snug">
+                                    {isAr ? '✓ تم حجز الموعد وإضافته لـ Google Calendar الخاص بك بنجاح!' : '✓ Consultation booked and injected to Google Calendar!'}
+                                  </div>
+                                )}
+
+                                <form onSubmit={handleBookCalendarEvent} className="space-y-3 text-right">
+                                  <div>
+                                    <label className="text-slate-400 text-[10px] font-bold block mb-1">
+                                      {isAr ? 'موضوع ومسمى الجلسة *' : 'Consultation Topic / Summary *'}
+                                    </label>
+                                    <input
+                                      type="text"
+                                      required
+                                      value={calSummary}
+                                      onChange={(e) => setCalSummary(e.target.value)}
+                                      placeholder={isAr ? "مراجعة متطلبات التحول السحابي" : "Advisory consultation review session"}
+                                      className="w-full bg-slate-950 border border-slate-850 rounded-xl py-2 px-3 text-white text-xs outline-none focus:border-sky-500 transition-all text-right"
+                                    />
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-3 text-right">
+                                    <div>
+                                      <label className="text-slate-400 text-[10px] font-bold block mb-1">
+                                        {isAr ? 'التاريخ والوقت بالتوقيت المحلي *' : 'Selected Date & Time *'}
+                                      </label>
+                                      <input
+                                        type="datetime-local"
+                                        required
+                                        value={calDateTime}
+                                        onChange={(e) => setCalDateTime(e.target.value)}
+                                        className="w-full bg-slate-950 border border-slate-850 rounded-xl py-2 px-3 text-white text-[11px] outline-none focus:border-sky-500 transition-all font-mono"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-slate-400 text-[10px] font-bold block mb-1">
+                                        {isAr ? 'مدة الجلسة الاستشارية' : 'Duration'}
+                                      </label>
+                                      <select
+                                        value={calDuration}
+                                        onChange={(e) => setCalDuration(e.target.value)}
+                                        className="w-full bg-slate-950 border border-slate-850 rounded-xl py-2 px-3 text-white text-xs outline-none focus:border-sky-505 transition-all text-right"
+                                      >
+                                        <option value="30">{isAr ? '30 دقيقة' : '30 mins'}</option>
+                                        <option value="60">{isAr ? '60 دقيقة (ساعة)' : '60 mins'}</option>
+                                        <option value="90">{isAr ? '90 دقيقة' : '90 mins'}</option>
+                                      </select>
+                                    </div>
+                                  </div>
+
+                                  <div>
+                                    <label className="text-slate-400 text-[10px] font-bold block mb-1">
+                                      {isAr ? 'وصف تفصيلي للجلسة (اختياري)' : 'Diagnostic Details (Optional)'}
+                                    </label>
+                                    <textarea
+                                      value={calDescription}
+                                      onChange={(e) => setCalDescription(e.target.value)}
+                                      placeholder={isAr ? "نقاش حول تكامل الدفع وترحيل البيانات" : "Discuss backend architectural steps and payment modules."}
+                                      rows={2}
+                                      className="w-full bg-slate-950 border border-slate-850 rounded-xl py-2 px-3 text-white text-xs outline-none focus:border-sky-500 transition-all resize-none text-right placeholder:text-slate-650"
+                                    />
+                                  </div>
+
+                                  <button
+                                    type="submit"
+                                    disabled={isBookingEvent || !calSummary || !calDateTime}
+                                    className="w-full py-2 bg-emerald-500 hover:bg-emerald-450 disabled:bg-emerald-950 disabled:text-slate-500 text-slate-950 font-black text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:shadow-lg transform active:scale-98"
+                                  >
+                                    {isBookingEvent ? (
+                                      <Loader2 className="w-4 h-4 animate-spin text-slate-900" />
+                                    ) : (
+                                      <Calendar className="w-3.5 h-3.5" />
+                                    )}
+                                    <span>{isAr ? 'حجز وإرسال لـ Google Calendar ➔' : 'Schedule on Google Calendar ➔'}</span>
+                                  </button>
+                                </form>
+                              </div>
+
+                            </div>
+
+                          </div>
+                        )}
+
+                      </div>
+                    ) : null}
 
                     <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-850/60 text-[10px] text-slate-400 text-center leading-relaxed">
                       {isAr 
