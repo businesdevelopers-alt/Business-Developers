@@ -81,6 +81,17 @@ export interface Client {
   industry?: string; // Company Industry
   joinedAt?: string; // Joining date
   bio?: string; // Company brief bio
+  jobTitle?: string; // Job Title
+  linkedin?: string; // LinkedIn URL
+  logo?: string; // Company custom logo
+  notifications?: {
+    email: boolean;
+    sms: boolean;
+    push: boolean;
+    marketing: boolean;
+  };
+  team?: any[];
+  contracts?: any[];
 }
 
 export interface ClientRequest {

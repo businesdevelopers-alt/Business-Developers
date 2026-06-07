@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Lang } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Lang, Client } from '../types';
 import { 
   FileText, 
   TrendingUp, 
@@ -29,6 +29,8 @@ import { motion, AnimatePresence } from 'motion/react';
 
 interface ServicesMarketProps {
   lang: Lang;
+  currentClient?: Client | null;
+  onAddRequest?: (reqData: any) => Promise<void> | void;
 }
 
 interface ServiceItem {
@@ -250,7 +252,7 @@ const SERVICES_DATA: ServiceItem[] = [
   }
 ];
 
-export default function ServicesMarket({ lang }: ServicesMarketProps) {
+export default function ServicesMarket({ lang, currentClient, onAddRequest }: ServicesMarketProps) {
   const isAr = lang === 'ar';
   const [filter, setFilter] = useState<'all' | 'plans' | 'structures' | 'financials'>('all');
   
@@ -270,6 +272,20 @@ export default function ServicesMarket({ lang }: ServicesMarketProps) {
   const [clientPhone, setClientPhone] = useState('');
   const [clientStage, setClientStage] = useState('funded');
   const [clientGoals, setClientGoals] = useState('');
+
+  useEffect(() => {
+    if (currentClient) {
+      setClientName(currentClient.name || '');
+      setClientEmail(currentClient.email || '');
+      setClientCompany(currentClient.companyName || '');
+      setClientPhone(currentClient.phone || '');
+    } else {
+      setClientName('');
+      setClientEmail('');
+      setClientCompany('');
+      setClientPhone('');
+    }
+  }, [currentClient, isWizardOpen]);
   
   // Interactive Final Proposal proposal generator
   const [generatedProposal, setGeneratedProposal] = useState<any | null>(null);
@@ -380,6 +396,21 @@ export default function ServicesMarket({ lang }: ServicesMarketProps) {
       deliverables: isAr ? activeService.deliverablesAr : activeService.deliverablesEn,
       details: isAr ? activeService.detailsAr : activeService.detailsEn
     };
+
+    if (onAddRequest) {
+      onAddRequest({
+        clientEmail: clientEmail.toLowerCase(),
+        name: clientName,
+        companyName: clientCompany,
+        sectorId: targetIndustry || 'retail',
+        solutionId: activeService.id,
+        message: clientGoals || (isAr ? `طلب حزمة استشارية وهندسة خطط: ${activeService.titleAr}` : `Consultation and planning package ordered: ${activeService.titleEn}`),
+        phone: clientPhone,
+        techStack: isAr ? activeService.featuresAr : activeService.featuresEn,
+        timelineDays: days,
+        estimatedCost: price.toLocaleString()
+      });
+    }
 
     setGeneratedProposal(mockProposal);
     setWizardStep(3); // Step 3: Interactive Bill & Proposal Document Screen

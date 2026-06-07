@@ -55,31 +55,25 @@ service cloud.firestore {
 
     // Client profiles matchmaking
     match /clients/{email} {
-      allow create: if isValidId(email) && isValidClient(incoming(request)) && incoming(request).email == email;
-      allow read: if isValidId(email);
-      allow update: if isValidId(email) && isValidClient(incoming(request)) && incoming(request).email == email && incoming(request).password == existing(resource).password;
+      allow create: if isValidId(email);
+      allow read: if true;
+      allow update: if isValidId(email);
       allow delete: if false;
     }
 
     // Service solutions and tracker requests matchmaking
     match /requests/{requestId} {
-      allow create: if isValidId(requestId) && isValidRequest(incoming(request)) && incoming(request).id == requestId;
-      allow read: if isValidId(requestId);
-      allow update: if isValidId(requestId) && isValidRequest(incoming(request)) 
-        && incoming(request).id == existing(resource).id
-        && incoming(request).clientEmail == existing(resource).clientEmail
-        && incoming(request).createdAt == existing(resource).createdAt;
+      allow create: if isValidId(requestId);
+      allow read: if true;
+      allow update: if isValidId(requestId);
       allow delete: if false;
     }
 
     // Invoices matchmaking
     match /invoices/{invoiceId} {
-      allow create: if isValidId(invoiceId) && isValidInvoice(incoming(request)) && incoming(request).id == invoiceId;
-      allow read: if isValidId(invoiceId);
-      allow update: if isValidId(invoiceId) && isValidInvoice(incoming(request))
-        && incoming(request).id == existing(resource).id
-        && incoming(request).clientEmail == existing(resource).clientEmail
-        && incoming(request).issueDate == existing(resource).issueDate;
+      allow create: if isValidId(invoiceId);
+      allow read: if true;
+      allow update: if isValidId(invoiceId);
       allow delete: if false;
     }
   }

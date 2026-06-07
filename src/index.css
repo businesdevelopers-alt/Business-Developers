@@ -144,3 +144,160 @@
   }
 }
 
+/* ==========================================
+   CLIENT PORTAL LIGHT PAGE THEME STYLES
+   ========================================== */
+.client-portal-light-page {
+  background-color: #fafafa !important;
+  color: #1e293b !important;
+}
+
+/* Background overrides for cards, panels, and sidebars */
+.client-portal-light-page .bg-slate-900,
+.client-portal-light-page .bg-slate-950,
+.client-portal-light-page .bg-slate-955,
+.client-portal-light-page .bg-slate-950\/40,
+.client-portal-light-page .bg-slate-950\/50,
+.client-portal-light-page .bg-slate-950\/75,
+.client-portal-light-page .bg-slate-900\/55,
+.client-portal-light-page .bg-slate-900\/50,
+.client-portal-light-page .bg-slate-900\/60,
+.client-portal-light-page .bg-slate-950\/90 {
+  background-color: #ffffff !important;
+}
+
+/* Hover effects for cards */
+.client-portal-light-page .hover\:bg-slate-900\/60:hover,
+.client-portal-light-page .hover\:bg-slate-900\/20:hover {
+  background-color: #f1f5f9 !important;
+}
+
+/* Soft gray boxes and badge accents */
+.client-portal-light-page .bg-slate-950\/80,
+.client-portal-light-page .bg-slate-900\/30,
+.client-portal-light-page .bg-slate-900\/10,
+.client-portal-light-page .bg-sky-500\/10,
+.client-portal-light-page .bg-red-500\/10,
+.client-portal-light-page .bg-emerald-500\/10,
+.client-portal-light-page .bg-emerald-505\/10,
+.client-portal-light-page .bg-purple-500\/10,
+.client-portal-light-page .bg-amber-500\/10 {
+  background-color: #f8fafc !important;
+}
+
+/* Borders adjustment to light theme rules */
+.client-portal-light-page .border-slate-800,
+.client-portal-light-page .border-slate-850,
+.client-portal-light-page .border-slate-855,
+.client-portal-light-page .border-slate-900,
+.client-portal-light-page .border-slate-850\/60,
+.client-portal-light-page .border-slate-850\/70,
+.client-portal-light-page .border-slate-800\/80 {
+  border-color: #e2e8f0 !important;
+}
+
+/* Sky highlight borders */
+.client-portal-light-page .border-sky-500,
+.client-portal-light-page .border-sky-450 {
+  border-color: #0284c7 !important;
+}
+
+/* Key Text Styles for light mode legibility */
+.client-portal-light-page h1,
+.client-portal-light-page h2,
+.client-portal-light-page h3,
+.client-portal-light-page h4,
+.client-portal-light-page h5,
+.client-portal-light-page h6,
+.client-portal-light-page .text-white {
+  color: #0f172a !important;
+}
+
+.client-portal-light-page .text-slate-400,
+.client-portal-light-page .text-slate-350,
+.client-portal-light-page .text-slate-200,
+.client-portal-light-page .text-slate-300,
+.client-portal-light-page .text-slate-450,
+.client-portal-light-page .text-slate-500,
+.client-portal-light-page .text-slate-550 {
+  color: #475569 !important;
+}
+
+/* Highlight tags and status indicators */
+.client-portal-light-page .text-sky-400,
+.client-portal-light-page .text-sky-450 {
+  color: #0284c7 !important;
+}
+
+.client-portal-light-page .text-emerald-400,
+.client-portal-light-page .text-emerald-500 {
+  color: #16a34a !important;
+}
+
+.client-portal-light-page .text-red-400 {
+  color: #dc2626 !important;
+}
+
+/* Form Controls: Inputs, Selects & Textareas */
+.client-portal-light-page input,
+.client-portal-light-page select,
+.client-portal-light-page textarea {
+  background-color: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+.client-portal-light-page input::placeholder,
+.client-portal-light-page textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+.client-portal-light-page input:focus,
+.client-portal-light-page select:focus,
+.client-portal-light-page textarea:focus {
+  border-color: #0284c7 !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.1) !important;
+}
+
+/* Tab segments and switchers */
+.client-portal-light-page .bg-slate-950\/75,
+.client-portal-light-page .bg-slate-950\/80 {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Button overrides for standard elements */
+.client-portal-light-page button.bg-sky-500 {
+  background-color: #0284c7 !important;
+  color: #ffffff !important;
+}
+
+.client-portal-light-page button.bg-sky-500:hover {
+  background-color: #0369a1 !important;
+}
+
+/* Layout cards when highlighted or selected in the designer canvas */
+.client-portal-light-page .border-sky-500 {
+  border-color: #0284c7 !important;
+  background-color: #f0f9ff !important;
+}
+
+/* Maintain beautiful dark coding environments in schema console windows */
+.client-portal-light-page .bg-slate-900.rounded-xl.border.border-slate-800 {
+  background-color: #0f172a !important;
+  border-color: #1e293b !important;
+}
+
+.client-portal-light-page .bg-slate-900.rounded-xl.border.border-slate-800 .text-white,
+.client-portal-light-page .bg-slate-900.rounded-xl.border.border-slate-800 .text-sky-450,
+.client-portal-light-page .bg-slate-900.rounded-xl.border.border-slate-800 .text-sky-440,
+.client-portal-light-page .bg-slate-900.rounded-xl.border.border-slate-800 pre,
+.client-portal-light-page .bg-slate-900.rounded-xl.border.border-slate-800 span {
+  color: unset !important;
+}
+
+.client-portal-light-page .bg-slate-950 {
+  background-color: #0b0f19 !important;
+}
+

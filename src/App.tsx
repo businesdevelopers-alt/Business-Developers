@@ -383,12 +383,12 @@ export default function App() {
     setCurrentClient(null);
   };
 
-  const handleAddRequest = async (reqData: Omit<ClientRequest, 'id' | 'createdAt' | 'clientEmail' | 'status'>) => {
+  const handleAddRequest = async (reqData: Partial<ClientRequest> & Omit<ClientRequest, 'id' | 'createdAt' | 'clientEmail' | 'status'>) => {
     const rId = `BD-${Math.floor(1000 + Math.random() * 9000)}`;
     const newRequest: ClientRequest = {
       ...reqData,
       id: rId,
-      clientEmail: currentClient ? currentClient.email.toLowerCase() : 'unregistered@guest.com',
+      clientEmail: reqData.clientEmail ? reqData.clientEmail.toLowerCase() : (currentClient ? currentClient.email.toLowerCase() : 'unregistered@guest.com'),
       status: 'pending',
       createdAt: new Date().toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' })
     };
@@ -459,14 +459,17 @@ export default function App() {
     }
   };
 
-  // Filter requests targeting the currently authenticated corporate account
+  // Check if current user is the administrator
+  const isAdminAccount = currentClient?.email.toLowerCase() === 'businesdevelopers@gmail.com';
+
+  // Filter requests targeting the currently authenticated corporate account, or all if admin
   const activeClientRequests = requests.filter(r => 
-    currentClient && r.clientEmail.toLowerCase() === currentClient.email.toLowerCase()
+    currentClient && (isAdminAccount || r.clientEmail.toLowerCase() === currentClient.email.toLowerCase())
   );
 
-  // Filter invoices targeting the currently authenticated corporate account
+  // Filter invoices targeting the currently authenticated corporate account, or all if admin
   const activeClientInvoices = invoices.filter(inv => 
-    currentClient && inv.clientEmail.toLowerCase() === currentClient.email.toLowerCase()
+    currentClient && (isAdminAccount || inv.clientEmail.toLowerCase() === currentClient.email.toLowerCase())
   );
 
   // Global Ctrl+K / Cmd+K listener for Quick Help Accessibility
@@ -566,7 +569,11 @@ export default function App() {
           onNavigateToConsult={handleNavigateToConsultWithSector}
         />
 
-        <ServicesMarket lang={lang} />
+        <ServicesMarket 
+          lang={lang} 
+          currentClient={currentClient}
+          onAddRequest={handleAddRequest}
+        />
 
         <EntrepreneurJourney
           lang={lang}
