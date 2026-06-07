@@ -120,6 +120,7 @@ export default function ClientPortal({
   const isAr = lang === 'ar';
   const [activeTab, setActiveTab] = useState<'login' | 'register' | 'admin_login'>('login');
   const [portalSubTab, setPortalSubTab] = useState<'profile' | 'requests' | 'invoices' | 'databases' | 'workspace' | 'team' | 'contracts' | 'financials' | 'dashboard' | 'admin_panel' | 'analytics'>('dashboard');
+  const [activeTierPreview, setActiveTierPreview] = useState<'platinum' | 'gold' | 'silver' | null>(null);
   const [adminActiveTab, setAdminActiveTab] = useState<'clients' | 'requests' | 'invoices'>('clients');
 
   // Team management states for "باقة النمو" (Growth Package)
@@ -1503,9 +1504,17 @@ GOVERNANCE & STATUTORIES / الحوكمة والأنظمة والاشتراطا�
   const [newTaskNotes, setNewTaskNotes] = useState('');
   const [newTaskDueDate, setNewTaskDueDate] = useState('');
   const [tasksSearchQuery, setTasksSearchQuery] = useState('');
+  const [tasksCategoryFilter, setTasksCategoryFilter] = useState<'All' | 'Development' | 'Design' | 'Admin' | 'Unorganized'>('All');
   const [isExportingMilestones, setIsExportingMilestones] = useState(false);
   const [isCategorizingTasks, setIsCategorizingTasks] = useState(false);
   const [isSyncingAllProjects, setIsSyncingAllProjects] = useState(false);
+
+  // AI Project Executive Summary State
+  const [projectSummary, setProjectSummary] = useState<string>(() => {
+    return localStorage.getItem(`bd_pmo_summary_${currentClient?.email || 'default'}`) || '';
+  });
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  const [summaryError, setSummaryError] = useState('');
 
   // Google Meet states
   const [isGeneratingMeetSpace, setIsGeneratingMeetSpace] = useState(false);
@@ -3099,6 +3108,67 @@ GOVERNANCE & STATUTORIES / الحوكمة والأنظمة والاشتراطا�
       setWorkspaceError(isAr ? `فشل في تصدير المهام: ${err.message}` : `Failed to export tasks: ${err.message}`);
     } finally {
       setIsExportingMilestones(false);
+    }
+  };
+
+  const handleGetProjectSummary = async () => {
+    setIsGeneratingSummary(true);
+    setSummaryError('');
+    try {
+      // Compile all project subtasks from active/approved/completed requests
+      const projectSubTasks = requests.flatMap(req => {
+        const subtasks = getSolutionSubTasks(req);
+        return subtasks.map(s => ({
+          id: s.id,
+          title: s.title,
+          status: s.status,
+          notes: s.desc,
+          project: req.name
+        }));
+      });
+
+      // Compile milestones
+      const projectMilestones = requests.flatMap(req => {
+        const milestones = getMilestones(req);
+        return milestones.map(m => ({
+          title: m.title,
+          status: m.done ? 'Completed' : 'Pending',
+          date: typeof m.date === 'string' ? m.date : 'N/A',
+          project: req.name
+        }));
+      });
+
+      const activeReqs = requests.filter(r => r.status === 'approved' || r.status === 'planned');
+      const compName = activeReqs.length > 0 ? activeReqs[0].companyName : (currentClient?.companyName || currentClient?.name);
+      const tier = currentClient?.tier || 'Silver';
+
+      const response = await fetch('/api/project/summary', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          tasks: projectSubTasks.length > 0 ? projectSubTasks : tasksInSelectedList,
+          milestones: projectMilestones,
+          lang: isAr ? 'ar' : 'en',
+          clientCompanyName: compName,
+          tier: tier
+        })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to generate project summary');
+      }
+
+      const data = await response.json();
+      setProjectSummary(data.summary || '');
+      localStorage.setItem(`bd_pmo_summary_${currentClient?.email || 'default'}`, data.summary || '');
+    } catch (err: any) {
+      console.error(err);
+      setSummaryError(isAr ? `تعذر توليد تقرير التلخيص: ${err.message}` : `Failed to synthesize project summary report: ${err.message}`);
+    } finally {
+      setIsGeneratingSummary(false);
     }
   };
 
@@ -5151,9 +5221,28 @@ GOVERNANCE & STATUTORIES / الحوكمة والأنظمة والاشتراطا�
                               <span>{currentClient?.name || currentClient?.email}</span>
                             </h4>
                             <div className="flex items-center gap-1.5 justify-start rtl:justify-end">
-                              <span className="text-[9px] font-black tracking-normal px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20 uppercase">
-                                {currentClient?.tier || 'client'}
-                              </span>
+                              {(() => {
+                                const tr = (currentClient?.tier || 'silver').toLowerCase();
+                                if (tr === 'platinum') {
+                                  return (
+                                    <span className="text-[9px] font-black tracking-normal px-2.5 py-0.5 rounded-full bg-gradient-to-r from-slate-900 via-slate-800 to-sky-950 text-sky-400 border border-sky-500/30 uppercase animate-pulse shadow-sm shadow-sky-500/10">
+                                      {isAr ? 'بلاتيني • Platinum' : 'Platinum Partner'}
+                                    </span>
+                                  );
+                                } else if (tr === 'gold') {
+                                  return (
+                                    <span className="text-[9px] font-black tracking-normal px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-600 via-yellow-500 to-amber-700 text-slate-950 border border-amber-400/30 uppercase shadow-sm shadow-amber-500/10">
+                                      {isAr ? 'ذهبي • Gold' : 'Gold Partner'}
+                                    </span>
+                                  );
+                                } else {
+                                  return (
+                                    <span className="text-[9px] font-black tracking-normal px-2.5 py-0.5 rounded-full bg-gradient-to-r from-slate-700 via-zinc-650 to-slate-800 text-slate-100 border border-slate-500/25 uppercase">
+                                      {isAr ? 'فضي • Silver' : 'Silver Partner'}
+                                    </span>
+                                  );
+                                }
+                              })()}
                               <span className="text-[10px] text-slate-400 font-medium font-sans">
                                 {isAr ? 'حساب الشريك' : 'Partner Space'}
                               </span>
@@ -5175,6 +5264,7 @@ GOVERNANCE & STATUTORIES / الحوكمة والأنظمة والاشتراطا�
                         <nav className="space-y-1.5">
                           {[
                             { id: 'dashboard', labelAr: 'لوحة التحكم والمؤشرات', labelEn: 'Dashboard Overview', icon: Activity },
+                            { id: 'profile', labelAr: 'الملف الشخصي والمزايا الرائعة', labelEn: 'Profile & Privileges', icon: User },
                             { id: 'analytics', labelAr: 'تحليلات الأداء والمشاريع', labelEn: 'Performance Analytics', icon: TrendingUp },
                             { id: 'workspace', labelAr: 'بيئة العمل المدمجة', labelEn: 'Workspace Sync', icon: Cloud },
                             { id: 'team', labelAr: 'إدارة الفريق', labelEn: 'Team Hub', icon: Users },
@@ -5409,6 +5499,100 @@ GOVERNANCE & STATUTORIES / الحوكمة والأنظمة والاشتراطا�
                               <DollarSign className="w-5 h-5" />
                             </div>
                           </div>
+                        </div>
+
+                        {/* AI Executive Project Summary Section */}
+                        <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-950/20 via-slate-900/40 to-slate-950 border border-indigo-500/10 shadow-lg shadow-indigo-500/5 space-y-4 relative overflow-hidden animate-fadeIn">
+                          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+                          
+                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                            <div className="flex items-start gap-2.5 justify-start rtl:justify-end">
+                              <div className="p-2 bg-indigo-500/15 text-indigo-400 border border-indigo-500/25 rounded-xl mt-0.5 shrink-0">
+                                <Sparkles className="w-5 h-5 text-indigo-400 animate-pulse" />
+                              </div>
+                              <div className="space-y-0.5 text-right rtl:text-right ltr:text-left">
+                                <h5 className="text-sm font-black text-white flex items-center gap-1.5 justify-start rtl:justify-end Cairo text-right">
+                                  <span>{isAr ? 'التقرير التلخيصي الفني والمؤشرات بذكاء Gemini' : 'Gemini AI Project Executive Summary'}</span>
+                                  <span className="text-[10px] font-sans font-extrabold bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded uppercase tracking-wider">
+                                    3.5 Flash
+                                  </span>
+                                </h5>
+                                <p className="text-[10.5px] text-slate-500 leading-relaxed text-right">
+                                  {isAr 
+                                    ? 'توليد فوري لتقرير الحالة العام للمشروع بناءً على مخرجات المهام وجداول التسليم بلمسة واحدة.' 
+                                    : 'Instant synthesis of executive project status based on task lists & milestone completion.'}
+                                </p>
+                              </div>
+                            </div>
+                            
+                            <button
+                              type="button"
+                              onClick={handleGetProjectSummary}
+                              disabled={isGeneratingSummary}
+                              className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-500 hover:bg-indigo-400 active:scale-[0.98] text-slate-950 font-black text-xs rounded-xl shadow-lg hover:shadow-indigo-500/10 transition-all disabled:opacity-50 cursor-pointer Cairo shrink-0"
+                            >
+                              {isGeneratingSummary ? (
+                                <>
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-950" />
+                                  <span>{isAr ? 'جاري صياغة التقرير...' : 'Synthesizing Report...'}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Sparkles className="w-3.5 h-3.5 text-slate-950" />
+                                  <span>{isAr ? 'توليد وتحديث التقرير التلخيصي' : 'Get Project Summary'}</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+
+                          {summaryError && (
+                            <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/20 text-[11px] text-rose-400 Cairo text-right rtl:text-right ltr:text-left flex items-center gap-2">
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse shrink-0" />
+                              <span>{summaryError}</span>
+                            </div>
+                          )}
+
+                          {projectSummary ? (
+                            <div className="p-4 rounded-xl bg-slate-900/50 border border-slate-850/65 text-slate-300 text-xs leading-relaxed space-y-3 font-semibold relative text-right rtl:text-right ltr:text-left transition-all">
+                              <div className="whitespace-pre-line text-[11.5px] text-slate-300 font-sans tracking-wide leading-relaxed">
+                                {projectSummary}
+                              </div>
+                              <div className="pt-2 border-t border-slate-850/60 flex justify-between items-center text-[10px] text-slate-500">
+                                <span className="flex items-center gap-1">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                                  <span>{isAr ? 'تم التحقق والاعتماد الرقمي' : 'Verified by PMO Advisory Board'}</span>
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    try {
+                                      navigator.clipboard.writeText(projectSummary);
+                                    } catch {
+                                      const textarea = document.createElement("textarea");
+                                      textarea.value = projectSummary;
+                                      document.body.appendChild(textarea);
+                                      textarea.select();
+                                      document.execCommand("copy");
+                                      document.body.removeChild(textarea);
+                                    }
+                                    alert(isAr ? '✓ تم نسخ ملخص التقرير بنجاح!' : '✓ Progress summary report copied!');
+                                  }}
+                                  className="flex items-center gap-1 hover:text-white transition-colors cursor-pointer"
+                                >
+                                  <Copy className="w-3 h-3" />
+                                  <span>{isAr ? 'نسخ التقرير التلخيصي' : 'Copy Summary'}</span>
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            !isGeneratingSummary && (
+                              <div className="p-6 rounded-xl bg-slate-900/30 border border-slate-850/40 text-center text-slate-500 text-[11px] font-sans">
+                                {isAr 
+                                  ? 'اضغط على زر توليد التقرير التلخيصي للحصول على تشخيص فوري لمسار المشروع بالكامل وإنجازه الهيكلي.' 
+                                  : 'Click "Get Project Summary" above to generate a brief, natural language summary of your overall timelines and deliveries.'}
+                              </div>
+                            )
+                          )}
                         </div>
 
                         {/* Status Change Notification Center Panel */}
@@ -7154,32 +7338,88 @@ GOVERNANCE & STATUTORIES / الحوكمة والأنظمة والاشتراطا�
 
                                         {/* Tasks Filter Search Bar */}
                                         {tasksInSelectedList.length > 0 && (
-                                          <div className="relative">
-                                            <input
-                                              type="text"
-                                              value={tasksSearchQuery}
-                                              onChange={(e) => setTasksSearchQuery(e.target.value)}
-                                              placeholder={isAr ? 'ابحث في المهام باسم أو وصف المهمة...' : 'Search tasks by name or description...'}
-                                              className={`w-full bg-slate-950 border border-slate-800 rounded-xl py-2 text-white text-xs outline-none focus:border-sky-500 text-right ${
-                                                isAr ? 'pl-3 pr-9' : 'pl-9 pr-3'
-                                              }`}
-                                            />
-                                            <div className={`absolute inset-y-0 flex items-center pointer-events-none ${
-                                              isAr ? 'right-0 pr-3' : 'left-0 pl-3'
-                                            }`}>
-                                              <Search className="h-3.5 w-3.5 text-slate-500" />
-                                            </div>
-                                            {tasksSearchQuery && (
-                                              <button
-                                                type="button"
-                                                onClick={() => setTasksSearchQuery('')}
-                                                className={`absolute inset-y-0 flex items-center text-[10px] text-slate-500 hover:text-white font-bold bg-slate-950/80 px-2 rounded-xl border border-slate-800 focus:outline-none cursor-pointer ${
-                                                  isAr ? 'left-2 my-1.5' : 'right-2 my-1.5'
+                                          <div className="space-y-2">
+                                            <div className="relative">
+                                              <input
+                                                type="text"
+                                                value={tasksSearchQuery}
+                                                onChange={(e) => setTasksSearchQuery(e.target.value)}
+                                                placeholder={isAr ? 'ابحث في المهام باسم أو وصف المهمة...' : 'Search tasks by name or description...'}
+                                                className={`w-full bg-slate-950 border border-slate-800 rounded-xl py-2 text-white text-xs outline-none focus:border-sky-500 text-right ${
+                                                  isAr ? 'pl-3 pr-9' : 'pl-9 pr-3'
                                                 }`}
-                                              >
-                                                {isAr ? 'مسح' : 'Clear'}
-                                              </button>
-                                            )}
+                                              />
+                                              <div className={`absolute inset-y-0 flex items-center pointer-events-none ${
+                                                isAr ? 'right-0 pr-3' : 'left-0 pl-3'
+                                              }`}>
+                                                <Search className="h-3.5 w-3.5 text-slate-500" />
+                                              </div>
+                                              {tasksSearchQuery && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => setTasksSearchQuery('')}
+                                                  className={`absolute inset-y-0 flex items-center text-[10px] text-slate-500 hover:text-white font-bold bg-slate-950/80 px-2 rounded-xl border border-slate-800 focus:outline-none cursor-pointer ${
+                                                    isAr ? 'left-2 my-1.5' : 'right-2 my-1.5'
+                                                  }`}
+                                                >
+                                                  {isAr ? 'مسح' : 'Clear'}
+                                                </button>
+                                              )}
+                                            </div>
+
+                                            {/* Advanced Category Filter Pills */}
+                                            <div className="flex flex-wrap items-center gap-1.5 justify-start sm:justify-end pt-1 bg-slate-950/25 p-2 rounded-xl border border-slate-850">
+                                              {[
+                                                { id: 'All', labelAr: 'الكل', labelEn: 'All', count: tasksInSelectedList.length, colorClass: 'border-slate-800 text-slate-300' },
+                                                { 
+                                                  id: 'Development', 
+                                                  labelAr: 'تطوير', 
+                                                  labelEn: 'Dev', 
+                                                  count: tasksInSelectedList.filter(t => t.title?.match(/^\[Development\]/i)).length,
+                                                  colorClass: 'border-emerald-500/15 text-emerald-400 bg-emerald-500/5 hover:border-emerald-500/30'
+                                                },
+                                                { 
+                                                  id: 'Design', 
+                                                  labelAr: 'تصميم', 
+                                                  labelEn: 'Design', 
+                                                  count: tasksInSelectedList.filter(t => t.title?.match(/^\[Design\]/i)).length,
+                                                  colorClass: 'border-purple-500/15 text-purple-400 bg-purple-500/5 hover:border-purple-500/30'
+                                                },
+                                                { 
+                                                  id: 'Admin', 
+                                                  labelAr: 'إدارة', 
+                                                  labelEn: 'Admin', 
+                                                  count: tasksInSelectedList.filter(t => t.title?.match(/^\[Admin\]/i)).length,
+                                                  colorClass: 'border-sky-500/15 text-sky-400 bg-sky-500/5 hover:border-sky-500/30'
+                                                },
+                                                { 
+                                                  id: 'Unorganized', 
+                                                  labelAr: 'غير مصنف', 
+                                                  labelEn: 'New', 
+                                                  count: tasksInSelectedList.filter(t => !t.title?.match(/^\[(Development|Design|Admin)\]/i)).length,
+                                                  colorClass: 'border-slate-800 text-slate-400 hover:border-slate-700'
+                                                }
+                                              ].map((filterTab) => {
+                                                const isFilterActive = tasksCategoryFilter === filterTab.id;
+                                                return (
+                                                  <button
+                                                    key={filterTab.id}
+                                                    type="button"
+                                                    onClick={() => setTasksCategoryFilter(filterTab.id as any)}
+                                                    className={`px-2.5 py-1 text-[10px] font-bold rounded-lg border transition-all select-none cursor-pointer flex items-center gap-1.5 ${
+                                                      isFilterActive 
+                                                        ? 'bg-sky-500 border-sky-450 text-slate-950 font-black shadow-lg shadow-sky-500/10 scale-[1.02]' 
+                                                        : `${filterTab.colorClass}`
+                                                    }`}
+                                                  >
+                                                    <span>{isAr ? filterTab.labelAr : filterTab.labelEn}</span>
+                                                    <span className={`text-[9px] px-1 rounded-full font-black ${isFilterActive ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-900 text-slate-500'}`}>
+                                                      {filterTab.count}
+                                                    </span>
+                                                  </button>
+                                                );
+                                              })}
+                                            </div>
                                           </div>
                                         )}
 
@@ -7191,10 +7431,21 @@ GOVERNANCE & STATUTORIES / الحوكمة والأنظمة والاشتراطا�
                                             </div>
                                           ) : (() => {
                                             const filteredTasks = tasksInSelectedList.filter((task: any) => {
-                                              if (!tasksSearchQuery.trim()) return true;
-                                              const term = tasksSearchQuery.toLowerCase();
-                                              return (task.title?.toLowerCase() || '').includes(term) || 
-                                                     (task.notes?.toLowerCase() || '').includes(term);
+                                              const matchesSearch = !tasksSearchQuery.trim() || 
+                                                (task.title?.toLowerCase() || '').includes(tasksSearchQuery.toLowerCase()) || 
+                                                (task.notes?.toLowerCase() || '').includes(tasksSearchQuery.toLowerCase());
+
+                                              const tagMatch = task.title?.match(/^\[(Development|Design|Admin)\]/i);
+                                              const taskCategory = tagMatch ? tagMatch[1] : null;
+
+                                              let matchesCategory = true;
+                                              if (tasksCategoryFilter === 'Unorganized') {
+                                                matchesCategory = !taskCategory;
+                                              } else if (tasksCategoryFilter !== 'All') {
+                                                matchesCategory = taskCategory?.toLowerCase() === tasksCategoryFilter.toLowerCase();
+                                              }
+
+                                              return matchesSearch && matchesCategory;
                                             });
 
                                             if (tasksInSelectedList.length === 0) {
@@ -9096,7 +9347,441 @@ GOVERNANCE & STATUTORIES / الحوكمة والأنظمة والاشتراطا�
                           </span>
                         </div>
                       </div>
-                     ) : null}
+                     ) : portalSubTab === 'profile' ? (
+                        <div className="space-y-6 font-sans text-right rtl:text-right ltr:text-left animate-fadeIn">
+                          {/* Profile Header */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-4">
+                            <div>
+                              <h5 className="text-base font-extrabold text-slate-800 flex items-center gap-2 justify-start rtl:justify-end Cairo">
+                                <User className="w-5 h-5 text-sky-600" />
+                                <span>{isAr ? 'الملف الشخصي وامتيازات حساب الشريك والـ Tier' : 'Profile & Partner Ecosystem Tier'}</span>
+                              </h5>
+                              <p className="text-xs text-slate-500 mt-1">
+                                {isAr 
+                                  ? 'إدارة بيانات حسابك الشريك، استعراض المزايا الحصرية والامتيازات الممنوحة لك حسب تصنيف شركتك.'
+                                  : 'Configure your partner metadata alongside corporate credentials, and view personalized exclusive premium SLA entitlements.'}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Two-Column Layout: Left (Preview Card & Tier Benefits Card), Right (Profile Edit Form) */}
+                          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                            
+                            {/* Left Column (Golden/Platinum/Silver Badge Visualizer) (5 Columns) */}
+                            <div className="lg:col-span-12 xl:col-span-5 space-y-6 w-full">
+                              <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3.5">
+                                <span className="text-[10px] font-black tracking-widest text-sky-450 uppercase block font-sans">
+                                  {isAr ? 'محاكي الفئات والامتيازات' : 'Ecosystem Tier Simulator'}
+                                </span>
+                                <p className="text-[11px] text-slate-400 leading-relaxed">
+                                  {isAr 
+                                    ? 'انقر على الفئات أدناه لمعاينة الألوان والجفنات والنظم الخاصة بكل شراكة والاطلاع على مستويات الدعم الفني الحصرية.'
+                                    : 'Toggle between tiers below to dynamically view distinct color gradients, metallic textures, and premium SLA privileges.'}
+                                </p>
+
+                                <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-850">
+                                  {[
+                                    { id: 'silver', labelAr: 'فضّي', labelEn: 'Silver' },
+                                    { id: 'gold', labelAr: 'ذهبي', labelEn: 'Gold' },
+                                    { id: 'platinum', labelAr: 'بلاتيني', labelEn: 'Platinum' }
+                                  ].map((t) => {
+                                    const isSelected = (activeTierPreview || (currentClient?.tier || 'silver').toLowerCase()) === t.id;
+                                    return (
+                                      <button
+                                        key={t.id}
+                                        type="button"
+                                        onClick={() => setActiveTierPreview(t.id as any)}
+                                        className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all capitalize cursor-pointer ${
+                                          isSelected 
+                                            ? 'bg-sky-500 text-slate-950 font-black shadow-md' 
+                                            : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                                        }`}
+                                      >
+                                        {isAr ? t.labelAr : t.labelEn}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+
+                              {/* Card Display Block */}
+                              {(() => {
+                                const selectedTier = activeTierPreview || (currentClient?.tier || 'silver').toLowerCase();
+                                
+                                // Grad options
+                                let cardGradient = "from-slate-700 via-slate-650 to-slate-850 border border-slate-500/30 text-white";
+                                let badgeName = "Silver Enterprise Partner";
+                                let badgeNameAr = "شريك فضي معتمد";
+                                let tierGlow = "shadow-slate-500/10";
+                                
+                                if (selectedTier === 'platinum') {
+                                  cardGradient = "from-slate-950 via-slate-900 to-sky-950 border border-sky-450/45 text-white";
+                                  badgeName = "Platinum Executive VIP";
+                                  badgeNameAr = "شريك بلاتيني تنفيذي 👑";
+                                  tierGlow = "shadow-sky-500/25 ring-2 ring-sky-500/20";
+                                } else if (selectedTier === 'gold') {
+                                  cardGradient = "from-amber-600 via-yellow-500 to-amber-700 border border-amber-450/40 text-slate-950";
+                                  badgeName = "Premium Gold Sovereign";
+                                  badgeNameAr = "شريك ذهبي ممتاز 🌟";
+                                  tierGlow = "shadow-amber-500/25 ring-2 ring-amber-500/20";
+                                } else {
+                                  cardGradient = "from-slate-800 via-zinc-700 to-slate-900 border border-slate-600/30 text-white";
+                                }
+
+                                return (
+                                  <div className={`relative rounded-3xl p-6 overflow-hidden ${cardGradient} ${tierGlow} transition-all duration-300 min-h-[220px] flex flex-col justify-between group`}>
+                                    {/* Glass Sheen overlay */}
+                                    <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 ease-out pointer-events-none" />
+
+                                    {/* Card Header */}
+                                    <div className="flex justify-between items-start gap-3">
+                                      <div className="space-y-0.5 text-right rtl:text-right ltr:text-left">
+                                        <span className="text-[9px] font-mono tracking-widest uppercase opacity-75">
+                                          {isAr ? 'عضوية الشراكة الرقمية' : 'COOPERATIVE PARTNER LICENSE'}
+                                        </span>
+                                        <h3 className="text-sm font-black tracking-wide Cairo">
+                                          {isAr ? badgeNameAr : badgeName}
+                                        </h3>
+                                      </div>
+                                      <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center backdrop-blur-md">
+                                        <Sparkles className="w-5 h-5 pointer-events-none" />
+                                      </div>
+                                    </div>
+
+                                    {/* Chip & NFC symbol visual */}
+                                    <div className="my-4 flex items-center justify-between">
+                                      {/* Golden Card Chip visualization */}
+                                      <div className="w-9 h-7 rounded-lg bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-300 border border-amber-300/40 p-1 flex flex-col justify-between relative shadow-inner overflow-hidden">
+                                        <div className="w-full h-0.5 bg-slate-900/10" />
+                                        <div className="w-full h-0.5 bg-slate-900/10" />
+                                        <div className="w-full h-0.5 bg-slate-900/10" />
+                                        <div className="absolute top-0 bottom-0 left-1/2 w-0.5 bg-slate-900/10" />
+                                      </div>
+                                      
+                                      <div className="text-[10px] font-mono select-all select-none opacity-80 uppercase tracking-widest text-right">
+                                        LICENSE-ID-BDX9
+                                      </div>
+                                    </div>
+
+                                    {/* Card Footer Holder Details */}
+                                    <div className="flex justify-between items-end gap-3 text-right rtl:text-right ltr:text-left">
+                                      <div className="space-y-0.5">
+                                        <p className="text-[8.5px] uppercase opacity-75">{isAr ? 'الاسم المفوض' : 'AUTHORIZED REPRESENTATIVE'}</p>
+                                        <p className="text-xs font-black truncate max-w-[150px] sm:max-w-[200px] hover:text-white transition-colors duration-200 Cairo">
+                                          {profName || currentClient?.name || 'N/A'}
+                                        </p>
+                                      </div>
+
+                                      <div className="space-y-0.5 shrink-0">
+                                        <p className="text-[8.5px] uppercase opacity-75 text-right">{isAr ? 'الشركة المنتسبة' : 'AFFILIATE'}</p>
+                                        <p className="text-xs font-black text-right truncate max-w-[124px] sm:max-w-[150px] Cairo">
+                                          {profCompany || currentClient?.companyName || 'Corporate Client'}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+
+                              {/* Tier Privileges listing based on selected simulated tier */}
+                              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4">
+                                <h4 className="text-xs font-black text-slate-800 border-b border-slate-200 pb-2 flex items-center gap-1.5 justify-start rtl:justify-end Cairo">
+                                  <Shield className="w-4 h-4 text-emerald-600" />
+                                  <span>{isAr ? 'امتيازات الخدمة والـ SLAs السارية' : 'Entitled SLA Privileges & Benefits'}</span>
+                                </h4>
+
+                                <div className="space-y-3">
+                                  {(() => {
+                                    const selectedTier = activeTierPreview || (currentClient?.tier || 'silver').toLowerCase();
+                                    
+                                    const benefitsList = selectedTier === 'platinum' ? [
+                                      { icon: Sparkles, textAr: "أولوية قصوى ودعم فني على مدار الساعة 24/7 مع كبير مستشاري النظم مباشرة.", textEn: "24/7 priority pipeline with Lead Systems Architect." },
+                                      { icon: Clock, textAr: "اتفاقية الخدمة SLA للمجالس التنفيذية: معالجة خلال ساعتين كحد أقصى.", textEn: "Ultra-fast Executive Council SLA: 2-hour response threshold." },
+                                      { icon: Cloud, textAr: "بيئة عمل تجريبية سحابية كاملة ومهيأة للاحتياجات السريعة مجاناً في Firestore.", textEn: "Complimentary custom sandbox environments & isolated test pods." },
+                                      { icon: Users, textAr: "اجتماع تشاوري مباشر أسبوعياً مع الفريق القيادي ومؤسس بيزنس ديفلوبرز.", textEn: "Weekly strategic advisory alignment sync with managing partners." }
+                                    ] : selectedTier === 'gold' ? [
+                                      { icon: Sparkles, textAr: "مستوى دعم ممتاز مع معالجة حوادث فنية بـ SLA خلال 4 ساعات.", textEn: "4-hour rapid technical escalation SLA response." },
+                                      { icon: Cpu, textAr: "أولوية معجّلة في دورات التطوير الرشيقة وجدولة السبرنتات الكبرى.", textEn: "Priority scheduling in upcoming development sprint windows." },
+                                      { icon: DollarSign, textAr: "حسم مالي 5% على كافة البرمجيات وتطبيقات الموازنات المستحدثة.", textEn: "Flat 5% discount on upcoming integrated solutions deployment." },
+                                      { icon: FileCheck, textAr: "مراجعة هيكلية ربع سنوية شاملة للأنظمة الأمنية وسلامة قواعد البيانات.", textEn: "Comprehensive cybersecurity & system health audits." }
+                                    ] : [
+                                      { icon: Sparkles, textAr: "دعم فني وتجاوب مع التذاكر بمستوى SLA خلال 12 ساعة.", textEn: "Standard 12-hour support SLA turnaround." },
+                                      { icon: Cloud, textAr: "ربط وتوافق كامل عبر Google Drive والأنظمة السحابية لتعزيز الحوكمة.", textEn: "Full access to Google Workspace syncing and cloud integrations." },
+                                      { icon: FileCheck, textAr: "سجلات أداء وموازنات مرئية ومحدثة باستمرار للقيادات الإدارية.", textEn: "Consolidated, transparent financial spreadsheets dashboard views." },
+                                      { icon: Shield, textAr: "تشفير مدمج لقواعد البيانات السحابية لضمان أمن وحفظ البيانات.", textEn: "Enterprise AES-255 local database encryption included." }
+                                    ];
+
+                                    return benefitsList.map((benefit, bIdx) => {
+                                      const BenefitIcon = benefit.icon;
+                                      return (
+                                        <div key={bIdx} className="flex gap-3 justify-start rtl:justify-end text-sm">
+                                          <div className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg max-h-8 shrink-0">
+                                            <BenefitIcon className="w-3.5 h-3.5" />
+                                          </div>
+                                          <div className="text-[11px] text-slate-650 leading-relaxed text-right md:text-right">
+                                            {isAr ? benefit.textAr : benefit.textEn}
+                                          </div>
+                                        </div>
+                                      );
+                                    });
+                                  })()}
+                                </div>
+
+                                <div className="mt-4 pt-4 border-t border-slate-200">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (typeof window !== 'undefined') {
+                                        alert(isAr 
+                                          ? 'تم توجيه طلب ترقية باقة العضوية بنجاح إلى المستشار المسؤول. سنتواصل معك لتأكيد بروتوكول الترقية وتحديث ميزات الـ SLA.'
+                                          : 'Tier upgrade request routed to your account representative successfully! We will contact you soon.'
+                                        );
+                                      }
+                                    }}
+                                    className="w-full py-2 bg-slate-900 hover:bg-slate-805 text-white hover:text-sky-400 text-xs rounded-xl font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-97"
+                                  >
+                                    <Sparkles className="w-3.5 h-3.5 animate-pulse text-sky-400" />
+                                    <span>{isAr ? 'تقديم طلب ترقية الشراكة الاستراتيجية' : 'Request Tier Upgrade Appraisal'}</span>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Right Column (Standard Profile Fields Form) (7 Columns) */}
+                            <div className="lg:col-span-12 xl:col-span-7 space-y-6 w-full">
+                              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
+                                <h4 className="text-xs font-black text-slate-800 border-b border-slate-200 pb-3 mb-5 flex items-center gap-1.5 justify-start rtl:justify-end Cairo">
+                                  <User className="w-4 h-4 text-sky-505 text-sky-500" />
+                                  <span>{isAr ? 'بيانات الشريك والاتصال الأساسية' : 'Primary Partner Contact Credentials'}</span>
+                                </h4>
+
+                                <form onSubmit={handleProfileUpdateSubmit} className="space-y-4">
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div className="space-y-1.5 text-right">
+                                      <label className="text-[10.5px] font-bold text-slate-600 block">
+                                        {isAr ? 'الاسم الكامل للمفوّض بالشركة' : 'Authorized Signatory Full Name'}
+                                      </label>
+                                      <input
+                                        type="text"
+                                        required
+                                        value={profName}
+                                        onChange={(e) => setProfName(e.target.value)}
+                                        className="w-full px-3.5 py-2.5 bg-slate-50 text-slate-800 border border-slate-200 rounded-xl text-xs font-bold leading-relaxed focus:outline-none focus:ring-1 focus:ring-sky-500 hover:bg-white text-right ltr:text-left"
+                                      />
+                                    </div>
+
+                                    <div className="space-y-1.5 text-right">
+                                      <label className="text-[10.5px] font-bold text-slate-605 text-slate-600 block">
+                                        {isAr ? 'اسم المنشأة / الشركة الرسمية' : 'Enterprise / Company Name'}
+                                      </label>
+                                      <input
+                                        type="text"
+                                        required
+                                        value={profCompany}
+                                        onChange={(e) => setProfCompany(e.target.value)}
+                                        className="w-full px-3.5 py-2.5 bg-slate-50 text-slate-800 border border-slate-200 rounded-xl text-xs font-bold leading-relaxed focus:outline-none focus:ring-1 focus:ring-sky-500 hover:bg-white text-right ltr:text-left"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div className="space-y-1.5 text-right">
+                                      <label className="text-[10.5px] font-bold text-slate-605 text-slate-600 block">
+                                        {isAr ? 'رقم الهاتف المباشر 📞' : 'Direct Contact Phone 📞'}
+                                      </label>
+                                      <input
+                                        type="tel"
+                                        value={profPhone}
+                                        onChange={(e) => setProfPhone(e.target.value)}
+                                        className="w-full px-3.5 py-2.5 bg-slate-50 text-slate-800 border border-slate-200 rounded-xl text-xs font-bold leading-relaxed focus:outline-none focus:ring-1 focus:ring-sky-500 hover:bg-white text-right ltr:text-left"
+                                        placeholder="+966 50 000 0000"
+                                      />
+                                    </div>
+
+                                    <div className="space-y-1.5 text-right">
+                                      <label className="text-[10.5px] font-bold text-slate-605 text-slate-600 block">
+                                        {isAr ? 'المسمى الوظيفي والموقع التنفيذي' : 'Signee Job Title / Rank'}
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={profJobTitle}
+                                        onChange={(e) => setProfJobTitle(e.target.value)}
+                                        className="w-full px-3.5 py-2.5 bg-slate-50 text-slate-800 border border-slate-200 rounded-xl text-xs font-bold leading-relaxed focus:outline-none focus:ring-1 focus:ring-sky-500 hover:bg-white text-right ltr:text-left"
+                                        placeholder={isAr ? 'مثال: رئيس مجلس الإدارة، مدير التقنية' : 'e.g., General Director'}
+                                      />
+                                    </div>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div className="space-y-1.5 text-right">
+                                      <label className="text-[10.5px] font-bold text-slate-605 text-slate-600 block">
+                                        {isAr ? 'قطاع وتصنيف الأعمال' : 'Business Sector & Industry'}
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={profIndustry}
+                                        onChange={(e) => setProfIndustry(e.target.value)}
+                                        className="w-full px-3.5 py-2.5 bg-slate-50 text-slate-800 border border-slate-200 rounded-xl text-xs font-bold leading-relaxed focus:outline-none focus:ring-1 focus:ring-sky-500 hover:bg-white text-right ltr:text-left"
+                                        placeholder={isAr ? 'مثل: الخدمات المالية، التجزئة' : 'e.g., Finance, Tech'}
+                                      />
+                                    </div>
+
+                                    <div className="space-y-1.5 text-right">
+                                      <label className="text-[10.5px] font-bold text-slate-650 text-slate-600 block">
+                                        {isAr ? 'عنوان حساب LinkedIn للمفوّض' : 'Signee LinkedIn Profile URL'}
+                                      </label>
+                                      <input
+                                        type="url"
+                                        value={profLinkedin}
+                                        onChange={(e) => setProfLinkedin(e.target.value)}
+                                        className="w-full px-3.5 py-2.5 bg-slate-50 text-slate-800 border border-slate-200 rounded-xl text-xs font-bold leading-relaxed focus:outline-none focus:ring-1 focus:ring-sky-500 hover:bg-white text-right ltr:text-left"
+                                        placeholder="https://linkedin.com/in/username"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  <div className="space-y-1.5 text-right">
+                                    <label className="text-[10.5px] font-bold text-slate-605 text-slate-650 text-slate-600 block">
+                                      {isAr ? 'رابط ملف شعار الشركة المعتمد (Logo URL)' : 'Corporate Logo Image Link'}
+                                    </label>
+                                    <input
+                                      type="url"
+                                      value={profLogo}
+                                      onChange={(e) => setProfLogo(e.target.value)}
+                                      className="w-full px-3.5 py-2.5 bg-slate-50 text-slate-800 border border-slate-200 rounded-xl text-xs font-bold leading-relaxed focus:outline-none focus:ring-1 focus:ring-sky-500 hover:bg-white text-right ltr:text-left"
+                                      placeholder="https://example.com/logo.png"
+                                    />
+                                  </div>
+
+                                  <div className="space-y-1.5 text-right">
+                                    <label className="text-[10.5px] font-bold text-slate-606 text-slate-650 text-slate-600 block">
+                                      {isAr ? 'نبذة تعريفية سريعة عن المنشأة ومجالات العمل' : 'Brief Corporate Biography'}
+                                    </label>
+                                    <textarea
+                                      rows={2}
+                                      value={profBio}
+                                      onChange={(e) => setProfBio(e.target.value)}
+                                      className="w-full px-3.5 py-2.5 bg-slate-50 text-slate-800 border border-slate-200 rounded-xl text-xs font-bold leading-relaxed focus:outline-none focus:ring-1 focus:ring-sky-500 hover:bg-white text-right ltr:text-left resize-none"
+                                      placeholder={isAr ? 'اكتب نبذة تصف حجم الشركة ونشاطها لتعزيز خدمات الاستشارة.' : 'Describe your core business focus and expansion directives.'}
+                                    />
+                                  </div>
+
+                                  {/* Notification Preferences Sub-block */}
+                                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-150 space-y-3 mt-6">
+                                    <span className="text-[10px] font-extrabold uppercase tracking-wide text-slate-500 block">
+                                      {isAr ? 'تفضيلات الإشعارات والمزامنة الأمنية' : 'Notification & Encryption Prefs'}
+                                    </span>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                                      {[
+                                        { value: prefEmail, setter: setPrefEmail, labelAr: 'تنبيهات العقود والمذكرات بالبريد', labelEn: 'Email Contract Updates' },
+                                        { value: prefSms, setter: setPrefSms, labelAr: 'متابعة عبر الرسائل النصية القصيرة SMS', labelEn: 'SLA SMS Pings' },
+                                        { value: prefPush, setter: setPrefPush, labelAr: 'إشعارات الويب وتحديثات المشاريع السريعة', labelEn: 'Browser Push Log' },
+                                        { value: prefMarketing, setter: setPrefMarketing, labelAr: 'أدلة تحديث النماذج والأبحاث الدورية', labelEn: 'Newsletter & Tech Reports' }
+                                      ].map((pref, pIdx) => (
+                                        <label key={pIdx} className="flex items-center gap-2 justify-start rtl:justify-end text-[11px] text-slate-650 cursor-pointer select-none">
+                                          <input
+                                            type="checkbox"
+                                            checked={pref.value}
+                                            onChange={(e) => pref.setter(e.target.checked)}
+                                            className="rounded border-slate-300 accent-sky-500 text-sky-500 cursor-pointer"
+                                          />
+                                          <span>{isAr ? pref.labelAr : pref.labelEn}</span>
+                                        </label>
+                                      ))}
+                                    </div>
+                                  </div>
+
+                                  {/* Error and Success Indicators */}
+                                  {profSuccess && (
+                                    <div className="p-3 bg-emerald-55 bg-emerald-50 border border-emerald-250 text-emerald-800 text-xs rounded-xl font-bold text-center">
+                                      {profSuccess}
+                                    </div>
+                                  )}
+                                  {profError && (
+                                    <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl font-bold text-center">
+                                      {profError}
+                                    </div>
+                                  )}
+
+                                  {/* Security Password Change Section collapsible structure */}
+                                  <div className="pt-2 border-t border-slate-200 mt-6 font-sans">
+                                    <details className="group space-y-3">
+                                      <summary className="text-[11px] font-extrabold text-slate-500 hover:text-slate-800 transition-colors cursor-pointer select-none py-1 flex items-center gap-1 justify-start rtl:justify-end list-none">
+                                        <Lock className="w-3.5 h-3.5" />
+                                        <span>{isAr ? '🔐 تغيير كلمة مرور بوابة الشركاء والتحقق الثنائي' : '🔐 Rotate Gateway Password & MFA'}</span>
+                                      </summary>
+
+                                      <div className="pt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                        <div className="space-y-1 text-right">
+                                          <label className="text-[10px] font-bold text-slate-600 block">
+                                            {isAr ? 'كلمة المرور الحالية' : 'Current Password'}
+                                          </label>
+                                          <input
+                                            type="password"
+                                            value={currentPassInput}
+                                            onChange={(e) => setCurrentPassInput(e.target.value)}
+                                            placeholder="••••••"
+                                            className="w-full px-3 py-2 bg-slate-50 text-slate-900 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-sky-500 hover:bg-white text-right"
+                                          />
+                                        </div>
+
+                                        <div className="space-y-1 text-right">
+                                          <label className="text-[10px] font-bold text-slate-600 block">
+                                            {isAr ? 'كلمة المرور الجديدة' : 'New Password'}
+                                          </label>
+                                          <input
+                                            type="password"
+                                            value={newPassInput}
+                                            onChange={(e) => setNewPassInput(e.target.value)}
+                                            placeholder="••••••"
+                                            className="w-full px-3 py-2 bg-slate-50 text-slate-900 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-sky-500 hover:bg-white text-right"
+                                          />
+                                        </div>
+
+                                        <div className="space-y-1 text-right">
+                                          <label className="text-[10px] font-bold text-slate-600 block">
+                                            {isAr ? 'تأكيد الرمز الجديد' : 'Confirm Password'}
+                                          </label>
+                                          <input
+                                            type="password"
+                                            value={confirmPassInput}
+                                            onChange={(e) => setConfirmPassInput(e.target.value)}
+                                            placeholder="••••••"
+                                            className="w-full px-3 py-2 bg-slate-50 text-slate-900 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-sky-500 hover:bg-white text-right"
+                                          />
+                                        </div>
+                                      </div>
+                                    </details>
+                                  </div>
+
+                                  {/* Submit Profile Details */}
+                                  <button
+                                    type="submit"
+                                    className="w-full py-2.5 bg-sky-500 hover:bg-sky-450 text-slate-950 text-xs font-black rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md hover:shadow-lg active:scale-98"
+                                  >
+                                    <UserCheck className="w-4 h-4" />
+                                    <span>{isAr ? 'حفظ وتأكيد التغيرات وتوثيق البيانات في السحابة' : 'Save Details & Sync with Cloud Firestore'}</span>
+                                  </button>
+                                </form>
+                              </div>
+                            </div>
+
+                          </div>
+                          
+                          {/* Footnote statement */}
+                          <div className="p-4 rounded-xl bg-slate-50 border border-slate-150 text-[10px] text-slate-500 leading-relaxed font-sans text-right">
+                            <span className="font-extrabold text-slate-705 text-slate-700 block">
+                              {isAr ? '🛡️ حوكمة وتحديث حساب الشريك:' : '🛡️ Partnership Access Governance Notice:'}
+                            </span>
+                            <span className="block mt-1 text-slate-600">
+                              {isAr 
+                                ? 'يتم حفظ كافة مصفوفات الامتلاك والهاشات التشريعية لبيانات الاتصالات وفق معايير تشفير AES-255 الثنائية مع فحص وتوثيق دوري ضد الثغرات وتزامن مستمر مع قواعد بيانات Firestore السحابية.'
+                                : 'All update requests, authorization signatures, and preference registries are permanently secured using institutional grade safety parameters.'}
+                            </span>
+                          </div>
+                        </div>
+                      ) : null}
 
                     <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-850/60 text-[10px] text-slate-400 text-center leading-relaxed">
                       {isAr 

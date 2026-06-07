@@ -181,22 +181,47 @@ export default function LiveChatWidget({ lang }: LiveChatWidgetProps) {
       );
     }, 600);
 
-    // Trigger Typing response simulate
+    // Trigger Typing loader
     setIsTyping(true);
     
-    // Choose appropriate response content
-    const responseText = getAgentResponse(textToSend);
+    // Prepare contextual dialogue history payload
+    const conversationHistory = messages.map(m => ({
+      sender: m.sender,
+      text: m.text
+    }));
 
-    setTimeout(() => {
+    // Fetch intelligent live response from server-side Gemini model
+    fetch('/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        message: textToSend,
+        history: conversationHistory
+      })
+    })
+    .then(async (res) => {
+      if (!res.ok) {
+        throw new Error(`HTTP error ${res.status}`);
+      }
+      return res.json();
+    })
+    .catch((err) => {
+      console.warn("Real-time AI Chat server fallback active:", err);
+      // Seamlessly fall back to pre-configured dynamic responses
+      return { response: getAgentResponse(textToSend) };
+    })
+    .then((data) => {
       setIsTyping(false);
       setMessages(prev => [...prev, {
         id: `agent-${Date.now()}`,
         sender: 'agent',
-        text: responseText,
+        text: data.response || getAgentResponse(textToSend),
         timestamp: new Date(),
         status: 'read'
       }]);
-    }, 2000);
+    });
   };
 
   const handleQuickReply = (textAr: string, textEn: string) => {
