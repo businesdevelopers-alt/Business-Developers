@@ -27,6 +27,7 @@ import {
   CreditCard,
   Database,
   Plus,
+  Search,
   Eye,
   Chrome,
   RefreshCw,
@@ -53,7 +54,9 @@ import {
   Upload,
   FileSpreadsheet,
   ArrowDown,
-  TrendingUp
+  TrendingUp,
+  Video,
+  Copy
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -1395,7 +1398,7 @@ GOVERNANCE & STATUTORIES / الحوكمة والأنظمة والاشتراطا�
   const [workspaceToken, setWorkspaceToken] = useState<string | null>(() => {
     return localStorage.getItem('bd_workspace_token') || null;
   });
-  const [workspaceActiveTab, setWorkspaceActiveTab] = useState<'drive' | 'forms' | 'calendar' | 'sheets'>('drive');
+  const [workspaceActiveTab, setWorkspaceActiveTab] = useState<'drive' | 'forms' | 'calendar' | 'sheets' | 'tasks' | 'meet'>('drive');
   
   // Google Sheets Integration states
   const [sheetsSpreadsheetId, setSheetsSpreadsheetId] = useState<string | null>(() => {
@@ -1486,6 +1489,36 @@ GOVERNANCE & STATUTORIES / الحوكمة والأنظمة والاشتراطا�
   const [driveUploadInFlight, setDriveUploadInFlight] = useState(false);
   const [driveUploadError, setDriveUploadError] = useState('');
   const [driveUploadSuccess, setDriveUploadSuccess] = useState('');
+
+  // Google Tasks Integration states
+  const [taskLists, setTaskLists] = useState<any[]>([]);
+  const [selectedTaskListId, setSelectedTaskListId] = useState<string>('');
+  const [tasksInSelectedList, setTasksInSelectedList] = useState<any[]>([]);
+  const [isLoadingTaskLists, setIsLoadingTaskLists] = useState(false);
+  const [isLoadingTasks, setIsLoadingTasks] = useState(false);
+  const [isCreatingTaskList, setIsCreatingTaskList] = useState(false);
+  const [isCreatingTask, setIsCreatingTask] = useState(false);
+  const [newTaskListTitle, setNewTaskListTitle] = useState('');
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskNotes, setNewTaskNotes] = useState('');
+  const [newTaskDueDate, setNewTaskDueDate] = useState('');
+  const [tasksSearchQuery, setTasksSearchQuery] = useState('');
+  const [isExportingMilestones, setIsExportingMilestones] = useState(false);
+  const [isSyncingAllProjects, setIsSyncingAllProjects] = useState(false);
+
+  // Google Meet states
+  const [isGeneratingMeetSpace, setIsGeneratingMeetSpace] = useState(false);
+  const [meetSpaces, setMeetSpaces] = useState<any[]>(() => {
+    try {
+      const stored = localStorage.getItem('bd_meet_spaces');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [meetSpaceTitle, setMeetSpaceTitle] = useState('');
+  const [createdMeetSpace, setCreatedMeetSpace] = useState<any | null>(null);
+  const [attachMeetLinkToCalendar, setAttachMeetLinkToCalendar] = useState(false);
 
   // Sync Google Calendar Events
   const handleFetchCalendarEvents = async () => {
@@ -2391,13 +2424,17 @@ GOVERNANCE & STATUTORIES / الحوكمة والأنظمة والاشتراطا�
 
   React.useEffect(() => {
     if (workspaceToken) {
-      if (portalSubTab === 'workspace') {
+      if (portalSubTab === 'dashboard') {
+        handleFetchCalendarEvents();
+      } else if (portalSubTab === 'workspace') {
         if (workspaceActiveTab === 'calendar') {
           handleFetchCalendarEvents();
         } else if (workspaceActiveTab === 'drive') {
           handleFetchDriveFiles();
         } else if (workspaceActiveTab === 'sheets' && sheetsSpreadsheetId) {
           handleFetchSheetsMetadata();
+        } else if (workspaceActiveTab === 'tasks') {
+          handleFetchTaskLists();
         }
       } else if (portalSubTab === 'financials' && financialSpreadsheetId) {
         handleFetchFinancialsMetadata();
@@ -2417,6 +2454,9 @@ GOVERNANCE & STATUTORIES / الحوكمة والأنظمة والاشتراطا�
       provider.addScope('https://www.googleapis.com/auth/forms.responses.readonly');
       provider.addScope('https://www.googleapis.com/auth/drive');
       provider.addScope('https://www.googleapis.com/auth/spreadsheets');
+      provider.addScope('https://www.googleapis.com/auth/tasks');
+      provider.addScope('https://www.googleapis.com/auth/meetings.space.created');
+      provider.addScope('https://www.googleapis.com/auth/meetings.space.readonly');
       
       const result = await signInWithPopup(auth, provider);
       const credential = GoogleAuthProvider.credentialFromResult(result);
@@ -2667,7 +2707,7 @@ GOVERNANCE & STATUTORIES / الحوكمة والأنظمة والاشتراطا�
       const startDT = new Date(calDateTime);
       const endDT = new Date(startDT.getTime() + parseInt(calDuration) * 60 * 1000);
       
-      const payload = {
+      const payload: any = {
         summary: calSummary,
         description: calDescription || (isAr ? 'جلسة تقييم وتخطيط الشراكة الرقمية المصنفة' : 'Corporate digital advisory and diagnostic review.'),
         start: {
@@ -2680,7 +2720,22 @@ GOVERNANCE & STATUTORIES / الحوكمة والأنظمة والاشتراطا�
         }
       };
 
-      const res = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+      if (attachMeetLinkToCalendar) {
+        payload.conferenceData = {
+          createRequest: {
+            requestId: `meet-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+            conferenceSolutionKey: {
+              type: 'hangoutsMeet'
+            }
+          }
+        };
+      }
+
+      const url = attachMeetLinkToCalendar 
+        ? 'https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1'
+        : 'https://www.googleapis.com/calendar/v3/calendars/primary/events';
+
+      const res = await fetch(url, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${workspaceToken}`,
@@ -2697,6 +2752,7 @@ GOVERNANCE & STATUTORIES / الحوكمة والأنظمة والاشتراطا�
       setCalSummary('');
       setCalDescription('');
       setCalDateTime('');
+      setAttachMeetLinkToCalendar(false);
       // Refresh event list
       handleFetchCalendarEvents();
       setTimeout(() => setBookingResponse(null), 6000);
@@ -2705,6 +2761,468 @@ GOVERNANCE & STATUTORIES / الحوكمة والأنظمة والاشتراطا�
       setWorkspaceError(isAr ? `خطأ أثناء حجز الموعد: ${err.message}` : `Booking failed: ${err.message}`);
     } finally {
       setIsBookingEvent(false);
+    }
+  };
+
+  // Google Tasks Integration methods
+  const handleFetchTaskLists = async () => {
+    if (!workspaceToken) return;
+    setIsLoadingTaskLists(true);
+    setWorkspaceError('');
+    try {
+      const res = await fetch('https://tasks.googleapis.com/tasks/v1/users/@me/lists', {
+        headers: { 'Authorization': `Bearer ${workspaceToken}` }
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to load task lists (status ${res.status})`);
+      }
+      const data = await res.json();
+      const lists = data.items || [];
+      setTaskLists(lists);
+      if (lists.length > 0) {
+        const exists = lists.some((l: any) => l.id === selectedTaskListId);
+        const nextListId = exists ? selectedTaskListId : lists[0].id;
+        setSelectedTaskListId(nextListId);
+        handleFetchTasks(nextListId);
+      } else {
+        setSelectedTaskListId('');
+        setTasksInSelectedList([]);
+      }
+    } catch (err: any) {
+      console.error(err);
+      setWorkspaceError(isAr ? `خطأ أثناء جلب قوائم المهام: ${err.message}` : `Failed to load task lists: ${err.message}`);
+    } finally {
+      setIsLoadingTaskLists(false);
+    }
+  };
+
+  const handleFetchTasks = async (listId: string) => {
+    if (!workspaceToken || !listId) return;
+    setIsLoadingTasks(true);
+    setWorkspaceError('');
+    try {
+      const res = await fetch(`https://tasks.googleapis.com/tasks/v1/lists/${listId}/tasks?showCompleted=true&showHidden=true`, {
+        headers: { 'Authorization': `Bearer ${workspaceToken}` }
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to load tasks (status ${res.status})`);
+      }
+      const data = await res.json();
+      setTasksInSelectedList(data.items || []);
+    } catch (err: any) {
+      console.error(err);
+      setWorkspaceError(isAr ? `خطأ أثناء جلب المهام: ${err.message}` : `Failed to load tasks: ${err.message}`);
+    } finally {
+      setIsLoadingTasks(false);
+    }
+  };
+
+  const handleCreateTaskList = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!workspaceToken || !newTaskListTitle.trim()) return;
+    setIsCreatingTaskList(true);
+    setWorkspaceError('');
+    try {
+      const res = await fetch('https://tasks.googleapis.com/tasks/v1/users/@me/lists', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${workspaceToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ title: newTaskListTitle })
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to create task list (status ${res.status})`);
+      }
+      const data = await res.json();
+      setNewTaskListTitle('');
+      const updatedRes = await fetch('https://tasks.googleapis.com/tasks/v1/users/@me/lists', {
+        headers: { 'Authorization': `Bearer ${workspaceToken}` }
+      });
+      if (updatedRes.ok) {
+        const uData = await updatedRes.json();
+        const lists = uData.items || [];
+        setTaskLists(lists);
+        setSelectedTaskListId(data.id);
+        handleFetchTasks(data.id);
+      }
+    } catch (err: any) {
+      console.error(err);
+      setWorkspaceError(isAr ? `خطأ أثناء إنشاء قائمة المهام: ${err.message}` : `Failed to create task list: ${err.message}`);
+    } finally {
+      setIsCreatingTaskList(false);
+    }
+  };
+
+  const handleCreateTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!workspaceToken || !selectedTaskListId || !newTaskTitle.trim()) return;
+    setIsCreatingTask(true);
+    setWorkspaceError('');
+    try {
+      const payload: any = {
+        title: newTaskTitle,
+        notes: newTaskNotes || undefined,
+      };
+      if (newTaskDueDate) {
+        payload.due = new Date(newTaskDueDate).toISOString();
+      }
+      const res = await fetch(`https://tasks.googleapis.com/tasks/v1/lists/${selectedTaskListId}/tasks`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${workspaceToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to create task (status ${res.status})`);
+      }
+      setNewTaskTitle('');
+      setNewTaskNotes('');
+      setNewTaskDueDate('');
+      handleFetchTasks(selectedTaskListId);
+    } catch (err: any) {
+      console.error(err);
+      setWorkspaceError(isAr ? `خطأ أثناء إنشاء المهمة: ${err.message}` : `Failed to create task: ${err.message}`);
+    } finally {
+      setIsCreatingTask(false);
+    }
+  };
+
+  const handleToggleTaskStatus = async (taskId: string, currentStatus: string) => {
+    if (!workspaceToken || !selectedTaskListId) return;
+    const nextStatus = currentStatus === 'completed' ? 'needsAction' : 'completed';
+    try {
+      setTasksInSelectedList(prev => prev.map(t => t.id === taskId ? { ...t, status: nextStatus } : t));
+      
+      const payload: any = {
+        id: taskId,
+        status: nextStatus
+      };
+      if (nextStatus === 'completed') {
+        payload.completed = new Date().toISOString();
+      }
+      
+      const res = await fetch(`https://tasks.googleapis.com/tasks/v1/lists/${selectedTaskListId}/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${workspaceToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to update task status (status ${res.status})`);
+      }
+      handleFetchTasks(selectedTaskListId);
+    } catch (err: any) {
+      console.error(err);
+      setWorkspaceError(isAr ? `خطأ أثناء تحديث حالة المهمة: ${err.message}` : `Failed to update task status: ${err.message}`);
+      handleFetchTasks(selectedTaskListId);
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string, taskTitle: string) => {
+    if (!workspaceToken || !selectedTaskListId) return;
+    const confirmed = window.confirm(
+      isAr 
+        ? `هل أنت متأكد من حذف المهمة "${taskTitle}" نهائياً من حساب Google الخاص بك؟` 
+        : `Are you sure you want to delete the task "${taskTitle}" permanently from your Google Tasks?`
+    );
+    if (!confirmed) return;
+    
+    try {
+      const res = await fetch(`https://tasks.googleapis.com/tasks/v1/lists/${selectedTaskListId}/tasks/${taskId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${workspaceToken}` }
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to delete task (status ${res.status})`);
+      }
+      handleFetchTasks(selectedTaskListId);
+    } catch (err: any) {
+      console.error(err);
+      setWorkspaceError(isAr ? `خطأ أثناء حذف المهمة: ${err.message}` : `Failed to delete task: ${err.message}`);
+    }
+  };
+
+  const handleExportProjectMilestones = async (reqId: string) => {
+    if (!workspaceToken || !selectedTaskListId) return;
+    const req = requests.find(r => r.id === reqId);
+    if (!req) return;
+    
+    const subTasks = getSolutionSubTasks(req);
+    if (subTasks.length === 0) return;
+    
+    const count = subTasks.length;
+    const confirmed = window.confirm(
+      isAr 
+        ? `هل أنت متأكد من تصدير ${count} مهام/معالم فرعية من المشروع "${req.id}" إلى قائمة مهام Google المحددة؟`
+        : `Are you sure you want to export ${count} project milestones from "${req.id}" directly into your Google Tasks list?`
+    );
+    if (!confirmed) return;
+    
+    setIsExportingMilestones(true);
+    setWorkspaceError('');
+    try {
+      for (const item of subTasks) {
+        const title = isAr 
+          ? `[مشروع ${req.id}] ${item.title}` 
+          : `[Project ${req.id}] ${item.title}`;
+        const notes = isAr 
+          ? `مسؤولية المخرجات: ${item.role}\nالوصف العملي: ${item.desc}` 
+          : `Role Assignment: ${item.role}\nTechnical Details: ${item.desc}`;
+        
+        await fetch(`https://tasks.googleapis.com/tasks/v1/lists/${selectedTaskListId}/tasks`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${workspaceToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            title,
+            notes
+          })
+        });
+      }
+      
+      handleFetchTasks(selectedTaskListId);
+      alert(
+        isAr 
+          ? `نجاح! تم تصدير كافة المعالم (${count} مهام) وتكاملها مع Google Tasks بنجاح!` 
+          : `Success! Exported all ${count} project milestones to Google Tasks successfully!`
+      );
+    } catch (err: any) {
+      console.error(err);
+      setWorkspaceError(isAr ? `فشل في تصدير المهام: ${err.message}` : `Failed to export tasks: ${err.message}`);
+    } finally {
+      setIsExportingMilestones(false);
+    }
+  };
+
+  const handleSyncAllProjectsToGoogleTasks = async () => {
+    if (!workspaceToken) {
+      setWorkspaceError(isAr ? 'الرجاء ربط حساب Google أولاً' : 'Please authenticate with Google first.');
+      return;
+    }
+    setIsSyncingAllProjects(true);
+    setWorkspaceError('');
+    try {
+      // 1. Fetch all task lists
+      const listsRes = await fetch('https://tasks.googleapis.com/tasks/v1/users/@me/lists', {
+        headers: { 'Authorization': `Bearer ${workspaceToken}` }
+      });
+      if (!listsRes.ok) {
+        throw new Error(`Failed to query Google Task lists (status ${listsRes.status})`);
+      }
+      const listsData = await listsRes.json();
+      const lists = listsData.items || [];
+      
+      // Determine the designated list name
+      const targetListName = isAr ? 'مشاريع مطوري الأعمال Business Developers' : 'Business Developers Projects';
+      let bdList = lists.find((l: any) => l.title === targetListName || l.title === 'Business Developers Projects' || l.title?.toLowerCase().includes('business developers'));
+      let listId = bdList?.id;
+      
+      if (!listId) {
+        // Create new list
+        const createListRes = await fetch('https://tasks.googleapis.com/tasks/v1/users/@me/lists', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${workspaceToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ title: targetListName })
+        });
+        if (!createListRes.ok) {
+          throw new Error('Could not create a designated Business Developers task list');
+        }
+        const createdList = await createListRes.json();
+        listId = createdList.id;
+      }
+      
+      setSelectedTaskListId(listId);
+      
+      // 2. Fetch all existing tasks in that list to cross-reference
+      const tasksRes = await fetch(`https://tasks.googleapis.com/tasks/v1/lists/${listId}/tasks?showCompleted=true&showHidden=true`, {
+        headers: { 'Authorization': `Bearer ${workspaceToken}` }
+      });
+      if (!tasksRes.ok) {
+        throw new Error(`Failed to query existing tasks inside the list (status ${tasksRes.status})`);
+      }
+      const tasksData = await tasksRes.json();
+      const existingTasks = tasksData.items || [];
+      
+      // 3. Filter current client’s requests
+      const clientReqs = requests.filter(req => req.clientEmail === currentClient?.email);
+      if (clientReqs.length === 0) {
+        alert(isAr ? 'لم يتم العثور على مشروعات نشطة للعميل الحالي لمزامنتها.' : 'No active projects found for the current client to synchronize.');
+        setIsSyncingAllProjects(false);
+        return;
+      }
+      
+      // 4. Sync each project
+      let updatedCount = 0;
+      let createdCount = 0;
+      
+      for (const req of clientReqs) {
+        const solObj = SOLUTIONS.find(s => s.id === req.solutionId);
+        const solutionTitle = isAr ? (solObj?.titleAr || req.solutionId) : (solObj?.titleEn || req.solutionId);
+        
+        // Find existing task
+        const existingProjTask = existingTasks.find((t: any) => t.title.includes(req.id) && !t.parent);
+        
+        const projPayload = {
+          title: `[Project: ${req.id}] ${solutionTitle}`,
+          notes: isAr 
+            ? `مطور الأعمال: Business Developers\nالحالة الفنية: ${req.status}\nتاريخ الطلب: ${req.createdAt}\nموازنة المشروع تقديرياً: ${req.estimatedCost || 'قيد المراجعة'}\nوصف المتطلبات:\n${req.message || ''}`
+            : `Consultant Assigned: Business Developers Hub\nTechnical Status: ${req.status}\nRequested Date: ${req.createdAt}\nBudget Allocation: ${req.estimatedCost || 'Under review'}\nRequirements Brief:\n${req.message || ''}`,
+          status: req.status === 'completed' ? 'completed' : 'needsAction'
+        };
+        
+        let parentId = '';
+        if (existingProjTask) {
+          // Update project task
+          const patchRes = await fetch(`https://tasks.googleapis.com/tasks/v1/lists/${listId}/tasks/${existingProjTask.id}`, {
+            method: 'PATCH',
+            headers: {
+              'Authorization': `Bearer ${workspaceToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(projPayload)
+          });
+          if (patchRes.ok) {
+            parentId = existingProjTask.id;
+            updatedCount++;
+          }
+        } else {
+          // Create new project task
+          const postRes = await fetch(`https://tasks.googleapis.com/tasks/v1/lists/${listId}/tasks`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${workspaceToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(projPayload)
+          });
+          if (postRes.ok) {
+            const newTask = await postRes.json();
+            parentId = newTask.id;
+            createdCount++;
+          }
+        }
+        
+        // Sync project subtasks/milestones
+        if (parentId) {
+          const subTasks = getSolutionSubTasks(req);
+          for (const sub of subTasks) {
+            const subTitle = isAr ? `• ${sub.title}` : `• ${sub.title}`;
+            const existingSubTask = existingTasks.find((t: any) => t.parent === parentId && t.title === subTitle);
+            
+            const subPayload = {
+              title: subTitle,
+              notes: isAr 
+                ? `الدور التقني: ${sub.role}\nالحالة الفنية الفرعية: ${sub.status}\nالتفاصيل: ${sub.desc}`
+                : `Assigned Role: ${sub.role}\nMilestone Status: ${sub.status}\nDetails: ${sub.desc}`,
+              status: sub.status === 'completed' ? 'completed' : 'needsAction'
+            };
+            
+            if (existingSubTask) {
+              await fetch(`https://tasks.googleapis.com/tasks/v1/lists/${listId}/tasks/${existingSubTask.id}`, {
+                method: 'PATCH',
+                headers: {
+                  'Authorization': `Bearer ${workspaceToken}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(subPayload)
+              });
+            } else {
+              await fetch(`https://tasks.googleapis.com/tasks/v1/lists/${listId}/tasks?parent=${parentId}`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${workspaceToken}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(subPayload)
+              });
+            }
+          }
+        }
+      }
+      
+      // Update the active state lists and tasks in the UI
+      await handleFetchTaskLists();
+      await handleFetchTasks(listId);
+      
+      alert(
+        isAr 
+          ? `تم مزامنة مشاريع شركة مطوري الأعمال (Business Developers) بنجاح!\nالجديد: تم إنشاء/تحديث مشاريعك بمهام تفصيلية ومعالم ممتازة في حساب Google Tasks الخاص بك.`
+          : `Sync Completed successfully with Google Tasks API Service!\nProcessed active corporate project boards with detailed milestone nesting.`
+      );
+    } catch (err: any) {
+      console.error(err);
+      setWorkspaceError(isAr ? `فشل في المزامنة مع خدمة جوجل: ${err.message}` : `Failed Google Tasks API Sync: ${err.message}`);
+    } finally {
+      setIsSyncingAllProjects(false);
+    }
+  };
+
+  const handleCreateMeetSpace = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!workspaceToken) {
+      setWorkspaceError(isAr ? 'الرجاء ربط حساب Google أولاً' : 'Please authenticate with Google first.');
+      return;
+    }
+    setIsGeneratingMeetSpace(true);
+    setWorkspaceError('');
+    setCreatedMeetSpace(null);
+    try {
+      const res = await fetch('https://meet.googleapis.com/v2/spaces', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${workspaceToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({})
+      });
+      if (!res.ok) {
+        throw new Error(`Google Meet API error (status ${res.status})`);
+      }
+      const data = await res.json();
+      const titleToUse = meetSpaceTitle.trim() || (isAr ? 'جلسة مشورة مطوري الأعمال' : 'Business Developers Consulting Room');
+      const newItem = {
+        name: data.name,
+        meetingUri: data.meetingUri,
+        meetingCode: data.meetingCode,
+        title: titleToUse,
+        createdAt: new Date().toISOString()
+      };
+      
+      const updatedSpaces = [newItem, ...meetSpaces];
+      setMeetSpaces(updatedSpaces);
+      localStorage.setItem('bd_meet_spaces', JSON.stringify(updatedSpaces));
+      setCreatedMeetSpace(newItem);
+      setMeetSpaceTitle('');
+    } catch (err: any) {
+      console.error(err);
+      setWorkspaceError(isAr ? `خطأ أثناء إنشاء غرفة Google Meet: ${err.message}` : `Failed to create Meet room: ${err.message}`);
+    } finally {
+      setIsGeneratingMeetSpace(false);
+    }
+  };
+
+  const handleDeleteMeetSpace = (name: string, titleToDisplay: string) => {
+    const confirmation = window.confirm(
+      isAr 
+        ? `هل تريد إزالة الغرفة "${titleToDisplay}" من سجل اللقاءات المحلي؟` 
+        : `Are you sure you want to remove the space "${titleToDisplay}" from your session history?`
+    );
+    if (!confirmation) return;
+    const updated = meetSpaces.filter(sp => sp.name !== name);
+    setMeetSpaces(updated);
+    localStorage.setItem('bd_meet_spaces', JSON.stringify(updated));
+    if (createdMeetSpace?.name === name) {
+      setCreatedMeetSpace(null);
     }
   };
 
@@ -4636,6 +5154,101 @@ GOVERNANCE & STATUTORIES / الحوكمة والأنظمة والاشتراطا�
                           </button>
                         </div>
 
+                        {/* Google Meet Scheduled Sessions Spotlight */}
+                        {(() => {
+                          const meetEvents = (eventsList || []).filter(ev => {
+                            const link = ev.hangoutLink || 
+                              ev.conferenceData?.entryPoints?.find((ep: any) => ep.entryPointType === 'video' || ep.uri?.includes('meet.google.com'))?.uri || 
+                              (ev.location?.includes('meet.google.com') ? ev.location : null);
+                            return !!link;
+                          });
+
+                          if (meetEvents.length === 0) return null;
+
+                          return (
+                            <div className="grid grid-cols-1 gap-4 animate-fadeIn">
+                              {meetEvents.map((ev: any, idx: number) => {
+                                const meetLink = ev.hangoutLink || 
+                                  ev.conferenceData?.entryPoints?.find((ep: any) => ep.entryPointType === 'video' || ep.uri?.includes('meet.google.com'))?.uri || 
+                                  (ev.location?.includes('meet.google.com') ? ev.location : null);
+
+                                const startStr = ev.start?.dateTime || ev.start?.date;
+                                const formattedDT = startStr ? new Date(startStr).toLocaleString(isAr ? 'ar-SA' : 'en-US', {
+                                  weekday: 'long',
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                }) : '';
+
+                                return (
+                                  <div key={idx} className="p-5 rounded-2xl bg-gradient-to-r from-indigo-950/40 via-slate-900/40 to-slate-950 border border-indigo-500/30 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative overflow-hidden shadow-lg shadow-indigo-500/5">
+                                    <div className="absolute top-0 left-0 w-24 h-24 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
+                                    
+                                    <div className="flex items-start gap-3.5 flex-1 min-w-0">
+                                      <div className="p-3 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-xl shrink-0 mt-0.5">
+                                        <Video className="w-5 h-5 animate-pulse text-indigo-400" />
+                                      </div>
+                                      <div className="space-y-1 min-w-0">
+                                        <div className="flex items-center gap-1.5 justify-start rtl:justify-end">
+                                          <span className="text-[10px] bg-indigo-500/20 text-indigo-300 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider font-sans">
+                                            {isAr ? 'لقاء مجدول' : 'Advisory Support Call'}
+                                          </span>
+                                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                                        </div>
+                                        <h6 className="text-[13px] font-black text-white truncate max-w-lg font-sans">
+                                          {ev.summary || (isAr ? 'جلسة تقييم ومراجعة' : 'Corporate Advisory Session')}
+                                        </h6>
+                                        <p className="text-[10.5px] text-indigo-250 font-mono">
+                                          {formattedDT}
+                                        </p>
+                                        {ev.description && (
+                                          <p className="text-[10px] text-slate-450 truncate max-w-md font-sans">
+                                            {ev.description}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    <div className="flex flex-wrap gap-2 w-full md:w-auto justify-end shrink-0">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          try {
+                                            navigator.clipboard.writeText(meetLink);
+                                          } catch {
+                                            const textarea = document.createElement("textarea");
+                                            textarea.value = meetLink;
+                                            document.body.appendChild(textarea);
+                                            textarea.select();
+                                            document.execCommand("copy");
+                                            document.body.removeChild(textarea);
+                                          }
+                                          alert(isAr ? '✓ تم نسخ رابط الاجتماع المرئي!' : '✓ Meet invitation link copied!');
+                                        }}
+                                        className="flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-900 border border-slate-800 text-slate-400 hover:text-white rounded-xl text-[11px] font-bold transition-all cursor-pointer hover:bg-slate-850"
+                                      >
+                                        <Copy className="w-3.5 h-3.5" />
+                                        <span>{isAr ? 'نسخ الرابط' : 'Copy Link'}</span>
+                                      </button>
+
+                                      <a
+                                        href={meetLink}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="flex-1 md:flex-none flex items-center justify-center gap-1.5 px-4 py-2.5 bg-indigo-500 text-slate-950 font-black text-[11px] rounded-xl hover:bg-indigo-400 active:scale-[0.98] transition-all hover:shadow-lg hover:shadow-indigo-500/20 cursor-pointer"
+                                      >
+                                        <Video className="w-4 h-4 text-slate-950" />
+                                        <span>{isAr ? 'التحاق بالاجتماع الآن' : 'Join Meeting'}</span>
+                                      </a>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()}
+
                         {/* Summary Header Cards */}
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                           <div className="p-4 rounded-xl bg-slate-900 border border-slate-850 flex items-center justify-between">
@@ -5333,12 +5946,14 @@ GOVERNANCE & STATUTORIES / الحوكمة والأنظمة والاشتراطا�
                             </div>
 
                             {/* Inner Subtabs Selector */}
-                            <div className="flex p-0.5 bg-slate-900 rounded-lg border border-slate-800 shrink-0">
+                            <div className="flex flex-wrap p-0.5 bg-slate-900 rounded-lg border border-slate-800 shrink-0 gap-0.5">
                               {[
                                 { id: 'drive', labelAr: 'جوجل درايف', labelEn: 'G-Drive Files' },
                                 { id: 'forms', labelAr: 'نماذج Forms', labelEn: 'Forms Hub' },
                                 { id: 'calendar', labelAr: 'التقويم وجلساتنا', labelEn: 'Calendar Sessions' },
-                                { id: 'sheets', labelAr: 'جداول الموازنات', labelEn: 'Sheets Sync' }
+                                { id: 'sheets', labelAr: 'جداول الموازنات', labelEn: 'Sheets Sync' },
+                                { id: 'tasks', labelAr: 'مهام جوجل Tasks', labelEn: 'Google Tasks' },
+                                { id: 'meet', labelAr: 'لقاءات Meet', labelEn: 'Google Meet' }
                               ].map((subTab) => (
                                 <button
                                   key={subTab.id}
@@ -5686,30 +6301,46 @@ GOVERNANCE & STATUTORIES / الحوكمة والأنظمة والاشتراطا�
                                   <div className="space-y-2 max-h-64 overflow-y-auto pr-1 pt-1 text-right">
                                     {eventsList && eventsList.length > 0 ? (
                                       eventsList.map((ev: any, idx: number) => {
-                                        const startStr = ev.start?.dateTime || ev.start?.date;
-                                        const formattedDT = startStr ? new Date(startStr).toLocaleString(isAr ? 'ar-SA' : 'en-US', {
-                                          month: 'short',
-                                          day: 'numeric',
-                                          hour: '2-digit',
-                                          minute: '2-digit'
-                                        }) : '';
-                                        
-                                        return (
-                                          <div key={idx} className="p-3 rounded-xl bg-slate-900 border border-slate-850 space-y-1 hover:border-slate-800 transition-colors text-right animate-fadeIn">
-                                            <div className="flex justify-between items-center gap-3">
-                                              <span className="text-[11px] font-bold text-white truncate">{ev.summary || (isAr ? 'جلسة تقييم بدون عنوان' : 'Untitled session')}</span>
-                                              {ev.htmlLink && (
-                                                <a href={ev.htmlLink} target="_blank" rel="noreferrer" className="text-[10px] text-sky-405 shrink-0 hover:underline font-mono">
-                                                  {isAr ? 'عرض' : 'View'}
-                                                </a>
+                                          const startStr = ev.start?.dateTime || ev.start?.date;
+                                          const formattedDT = startStr ? new Date(startStr).toLocaleString(isAr ? 'ar-SA' : 'en-US', {
+                                            month: 'short',
+                                            day: 'numeric',
+                                            hour: '2-digit',
+                                            minute: '2-digit'
+                                          }) : '';
+                                          
+                                          // Search for Meet links in various locations returned by the API
+                                          const meetLink = ev.hangoutLink || ev.conferenceData?.entryPoints?.find((ep: any) => ep.entryPointType === 'video' || ep.uri?.includes('meet.google.com'))?.uri || (ev.location?.includes('meet.google.com') ? ev.location : null);
+
+                                          return (
+                                            <div key={idx} className="p-3 rounded-xl bg-slate-900 border border-slate-850 space-y-1 hover:border-slate-800 transition-colors text-right animate-fadeIn">
+                                              <div className="flex justify-between items-center gap-3">
+                                                <span className="text-[11px] font-bold text-white truncate">{ev.summary || (isAr ? 'جلسة تقييم بدون عنوان' : 'Untitled session')}</span>
+                                                {ev.htmlLink && (
+                                                  <a href={ev.htmlLink} target="_blank" rel="noreferrer" className="text-[10px] text-sky-400 shrink-0 hover:underline font-mono">
+                                                    {isAr ? 'عرض' : 'View'}
+                                                  </a>
+                                                )}
+                                              </div>
+                                              <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+                                                <span>{formattedDT}</span>
+                                                {ev.location && !ev.location.includes('meet.google.com') && <span className="truncate max-w-[124px] text-right">{ev.location}</span>}
+                                              </div>
+                                              {meetLink && (
+                                                <div className="pt-1.5 text-right flex items-center justify-end">
+                                                  <a
+                                                    href={meetLink}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-500/15 border border-indigo-500/30 text-indigo-400 rounded-lg text-[9px] font-bold hover:bg-indigo-500 hover:text-slate-950 transition-colors cursor-pointer"
+                                                  >
+                                                    <Video className="w-3 h-3 animate-pulse text-indigo-400" />
+                                                    <span>{isAr ? 'التحاق باجتماع Google Meet' : 'Join Google Meet Session'}</span>
+                                                  </a>
+                                                </div>
                                               )}
                                             </div>
-                                            <div className="flex justify-between text-[10px] text-slate-505 font-mono">
-                                              <span>{formattedDT}</span>
-                                              {ev.location && <span className="truncate max-w-[120px] text-right">{ev.location}</span>}
-                                            </div>
-                                          </div>
-                                        );
+                                          );
                                       })
                                     ) : (
                                       <div className="text-center py-6 text-slate-500 text-xs italic">
@@ -5787,6 +6418,20 @@ GOVERNANCE & STATUTORIES / الحوكمة والأنظمة والاشتراطا�
                                         rows={2}
                                         className="w-full bg-slate-950 border border-slate-850 rounded-xl py-2 px-3 text-white text-xs outline-none focus:border-sky-500 transition-all resize-none text-right placeholder:text-slate-650"
                                       />
+                                    </div>
+
+                                    {/* Google Meet Inclusion toggle */}
+                                    <div className="flex items-center justify-between gap-3 bg-slate-900/40 p-2.5 border border-slate-850 rounded-xl select-none">
+                                      <input
+                                        type="checkbox"
+                                        id="attachMeetLinkToCalendar"
+                                        checked={attachMeetLinkToCalendar}
+                                        onChange={(e) => setAttachMeetLinkToCalendar(e.target.checked)}
+                                        className="rounded border-slate-800 bg-slate-950 text-sky-400 focus:ring-sky-500 w-3.5 h-3.5 cursor-pointer accent-sky-400 shrink-0"
+                                      />
+                                      <label htmlFor="attachMeetLinkToCalendar" className="text-[10.5px] text-slate-300 font-medium text-right leading-relaxed cursor-pointer select-none">
+                                        {isAr ? 'إنشاء رابط Google Meet تلقائي وبثه بالجلسة' : 'Provision secure Google Meet space for this event'}
+                                      </label>
                                     </div>
 
                                     <button
@@ -6149,6 +6794,569 @@ GOVERNANCE & STATUTORIES / الحوكمة والأنظمة والاشتراطا�
                                       </div>
                                     </div>
                                   )}
+                                </div>
+                              </div>
+                            )}
+
+                            {workspaceActiveTab === 'tasks' && (
+                              <div className="space-y-6">
+                                <div className="p-5 rounded-2xl bg-slate-950/70 border border-slate-850 space-y-4">
+                                  {/* Header */}
+                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-900 pb-3">
+                                    <h6 className="text-[12px] font-extrabold text-white uppercase tracking-wider flex items-center gap-2">
+                                      <CheckSquare className="w-4 h-4 text-sky-400" />
+                                      <span>{isAr ? 'منصة مهام ومتابعة Google Tasks' : 'Google Tasks Management Hub'}</span>
+                                    </h6>
+                                    {(isLoadingTaskLists || isLoadingTasks) && (
+                                      <span className="text-[10px] text-sky-450 font-bold flex items-center gap-1 animate-pulse">
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-450" />
+                                        {isAr ? 'مزامنة مع Google Tasks...' : 'Syncing Google Tasks...'}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <p className="text-xs text-slate-400 leading-relaxed text-right rtl:text-right ltr:text-left">
+                                    {isAr
+                                      ? 'قم بمتابعة مهامك، إنشاء قوائم عمل جديدة، وتصدير كافة المخرجات ومعالم مشاريعك التقنية الهامة بشكل مباشر من البوابة الإلكترونية إلى حساب مهام جوجل الخاص بك.'
+                                      : 'Track checklists, create workspace task lists, and export strategic project delivery milestones directly to your corporate Google Tasks application.'}
+                                  </p>
+
+                                  {/* Strategic "1-Click Full Synchronizer" Dashboard card */}
+                                  <div className="p-4 rounded-xl bg-gradient-to-r from-sky-950/40 to-indigo-950/40 border border-sky-500/20 flex flex-col md:flex-row items-center justify-between gap-4 select-none">
+                                    <div className="space-y-1 text-right">
+                                      <h6 className="text-xs font-extrabold text-sky-450 flex items-center gap-1.5 justify-end">
+                                        <Sparkles className="w-4 h-4 text-sky-400 animate-pulse" />
+                                        <span>{isAr ? 'المزامنة السحابية الشاملة للمشاريع' : 'Unified Cloud Project Synchronization Service'}</span>
+                                      </h6>
+                                      <p className="text-[11px] text-slate-350 leading-relaxed text-right">
+                                        {isAr
+                                          ? 'هل تريد أتمتة كافة مشاريعك؟ هذا الخيار المميز ينشئ لك قائمة مخصصة باسم "Business Developers Projects" في حساب Google الخاص بك مع كافة المشاريع الحالية المعتمدة وتفاصيل تفريع المخرجات والمعالم الفيدرالية المرتبطة بها لسهولة التتبع والمتابعة المباشرة.'
+                                          : 'Automate your project tracking. This action provisions a dedicated "Business Developers Projects" task list in your Google account, syncing all your active corporate requests and their milestone checklists natively.'}
+                                      </p>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={handleSyncAllProjectsToGoogleTasks}
+                                      disabled={isSyncingAllProjects}
+                                      className="w-full md:w-auto shrink-0 px-5 py-2.5 bg-gradient-to-r from-sky-450 to-indigo-500 hover:from-sky-400 hover:to-indigo-400 text-slate-950 font-black rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-sky-500/10 active:scale-95 transition-all disabled:opacity-50"
+                                    >
+                                      {isSyncingAllProjects ? (
+                                        <>
+                                          <Loader2 className="w-4 h-4 animate-spin" />
+                                          <span>{isAr ? 'جاري المزامنة...' : 'Syncing...'}</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <RefreshCw className="w-4 h-4" />
+                                          <span>{isAr ? 'مزامنة كافة المشاريع الآن' : 'Sync All Projects Now'}</span>
+                                        </>
+                                      )}
+                                    </button>
+                                  </div>
+
+                                  {/* Error/Success Feedback */}
+                                  {workspaceError && (
+                                    <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-[11px] text-red-400 font-bold text-center">
+                                      {workspaceError}
+                                    </div>
+                                  )}
+
+                                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
+                                    {/* Sidebar: Lists Selection and Creator */}
+                                    <div className="space-y-4 col-span-1">
+                                      <div className="p-4 rounded-xl bg-slate-900 border border-slate-850 space-y-3.5">
+                                        <label className="text-[10px] uppercase font-bold text-slate-500 block text-right rtl:text-right ltr:text-left">
+                                          {isAr ? 'قائمة المهام النشطة' : 'Active Task List'}
+                                        </label>
+                                        
+                                        {taskLists.length > 0 ? (
+                                          <select
+                                            value={selectedTaskListId}
+                                            onChange={(e) => {
+                                              setSelectedTaskListId(e.target.value);
+                                              handleFetchTasks(e.target.value);
+                                            }}
+                                            className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 px-3 text-white text-xs Cairo block outline-none focus:border-sky-500 text-right"
+                                          >
+                                            {taskLists.map((list) => (
+                                              <option key={list.id} value={list.id}>
+                                                {list.title}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        ) : (
+                                          <div className="text-[11px] text-slate-500 py-1 text-right rtl:text-right ltr:text-left">
+                                            {isAr ? 'لم يتم العثور على قوائم مهام.' : 'No task lists found.'}
+                                          </div>
+                                        )}
+
+                                        <div className="border-t border-slate-850 pt-3">
+                                          <form onSubmit={handleCreateTaskList} className="space-y-2 text-right">
+                                            <label className="text-[10px] uppercase font-bold text-slate-500 block text-right rtl:text-right ltr:text-left">
+                                              {isAr ? 'إنشاء قائمة مهام جديدة' : 'Create New List'}
+                                            </label>
+                                            <div className="flex gap-2">
+                                              <input
+                                                type="text"
+                                                value={newTaskListTitle}
+                                                onChange={(e) => setNewTaskListTitle(e.target.value)}
+                                                placeholder={isAr ? 'اسم القائمة...' : 'List title...'}
+                                                className="flex-1 min-w-0 bg-slate-950 border border-slate-800 rounded-lg py-1.5 px-3 text-white text-xs outline-none focus:border-sky-505 text-right"
+                                              />
+                                              <button
+                                                type="submit"
+                                                disabled={isCreatingTaskList || !newTaskListTitle.trim()}
+                                                className="px-3 bg-sky-500 text-slate-950 font-black rounded-lg py-1.5 text-xs hover:opacity-90 active:scale-[0.95] transition-all cursor-pointer disabled:opacity-40"
+                                              >
+                                                {isCreatingTaskList ? <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0 mx-auto" /> : <Plus className="w-4 h-4 shrink-0 mx-auto" />}
+                                              </button>
+                                            </div>
+                                          </form>
+                                        </div>
+                                      </div>
+
+                                      {/* Export Milestones Fast card */}
+                                      <div className="p-4 rounded-xl bg-slate-900 border border-slate-850 space-y-3 text-right">
+                                        <h6 className="text-[11px] font-extrabold text-white flex items-center gap-1.5 justify-start rtl:justify-end">
+                                          <Sparkles className="w-3.5 h-3.5 text-sky-400" />
+                                          <span>{isAr ? 'تصدير معالم ومخرجات المشاريع' : 'Export Project Milestones'}</span>
+                                        </h6>
+                                        <p className="text-[10px] text-slate-500 leading-relaxed text-right rtl:text-right ltr:text-left">
+                                          {isAr 
+                                            ? 'اختر أحد مشروعاتك الفعّالة لتصدير كافة معالم البناء والمخرجات الفنية كمهام تفصيلية مباشرة إلى حساب Google Tasks الخاص بك.'
+                                            : 'Select an active consultancy project or business request to export all customized technical milestones directly to Google Tasks.'}
+                                        </p>
+
+                                        {requests.filter(req => req.clientEmail === currentClient?.email).length > 0 ? (
+                                          <div className="space-y-2 pt-1 font-sans">
+                                            {requests
+                                              .filter(req => req.clientEmail === currentClient?.email)
+                                              .map(req => {
+                                                const milestonesCount = getSolutionSubTasks(req).length;
+                                                return (
+                                                  <div key={req.id} className="p-2.5 rounded-lg bg-slate-950 border border-slate-850 flex flex-col gap-2 justify-between text-right">
+                                                    <div className="min-w-0 text-right space-y-0.5">
+                                                      <span className="text-[9px] font-black text-sky-400 block font-mono text-left">{req.id}</span>
+                                                      <p className="text-[10px] font-bold text-slate-300 truncate">
+                                                        {isAr ? (req.solutionId === 'ai-ml' ? 'ذكاء اصطناعي وتعلم آلي' : req.solutionId) : req.id}
+                                                      </p>
+                                                      <span className="text-[8.5px] text-slate-500 block">
+                                                        {isAr ? `${milestonesCount} مهام تنفيذية` : `${milestonesCount} milestones`}
+                                                      </span>
+                                                    </div>
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => handleExportProjectMilestones(req.id)}
+                                                      disabled={isExportingMilestones || !selectedTaskListId}
+                                                      className="w-full py-1.5 px-2.5 rounded bg-sky-500/10 hover:bg-sky-500 text-sky-400 hover:text-slate-950 font-black text-[9.5px] transition-all flex items-center justify-center gap-1 Cairo border border-sky-500/20 cursor-pointer disabled:opacity-40"
+                                                    >
+                                                      {isExportingMilestones ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                                                      <span>{isAr ? 'تصدير لمعلم Google' : 'Export to Google list'}</span>
+                                                    </button>
+                                                  </div>
+                                                );
+                                              })}
+                                          </div>
+                                        ) : (
+                                          <div className="text-[10px] text-slate-500 text-center py-2">
+                                            {isAr ? 'لا توجد مشاريع سارية لتصديرها.' : 'No active projects available.'}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Main Area: Tasks List and Creator */}
+                                    <div className="col-span-1 lg:col-span-2 space-y-4">
+                                      {/* Task creation form */}
+                                      <div className="p-4 rounded-xl bg-slate-900 border border-slate-850">
+                                        <form onSubmit={handleCreateTask} className="space-y-3.5 text-right">
+                                          <h6 className="text-[11px] font-extrabold text-white uppercase tracking-wider text-right rtl:text-right ltr:text-left">
+                                            {isAr ? 'إضافة مهمة سريعة' : 'Quick Add Task'}
+                                          </h6>
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <div className="space-y-1 sm:col-span-2 text-right">
+                                              <input
+                                                type="text"
+                                                value={newTaskTitle}
+                                                onChange={(e) => setNewTaskTitle(e.target.value)}
+                                                placeholder={isAr ? 'عنوان المهمة الفنية...' : 'Tasks title or delivery milestone...'}
+                                                className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 px-3 text-white text-xs outline-none focus:border-sky-500 text-right"
+                                                required
+                                              />
+                                            </div>
+                                            <div className="space-y-1 text-right">
+                                              <label className="text-[9px] font-black text-slate-500 block font-mono uppercase text-right rtl:text-right ltr:text-left">
+                                                {isAr ? 'ملاحظات وتفاصيل' : 'Description / Notes'}
+                                              </label>
+                                              <input
+                                                type="text"
+                                                value={newTaskNotes}
+                                                onChange={(e) => setNewTaskNotes(e.target.value)}
+                                                placeholder={isAr ? 'أولوية، دور فني...' : 'Priority, assignee roles...'}
+                                                className="w-full bg-slate-950 border border-slate-800 rounded-xl py-1.5 px-3 text-white text-xs outline-none focus:border-sky-500 text-right"
+                                              />
+                                            </div>
+                                            <div className="space-y-1 text-right">
+                                              <label className="text-[9px] font-black text-slate-500 block font-mono uppercase text-right rtl:text-right ltr:text-left">
+                                                {isAr ? 'الموعد النهائي' : 'Due Date'}
+                                              </label>
+                                              <input
+                                                type="date"
+                                                value={newTaskDueDate}
+                                                onChange={(e) => setNewTaskDueDate(e.target.value)}
+                                                className="w-full bg-slate-950 border border-slate-800 rounded-xl py-1.5 px-3 text-white text-xs outline-none focus:border-sky-500 text-slate-400 font-mono text-right"
+                                              />
+                                            </div>
+                                          </div>
+                                          
+                                          <div className="flex justify-end pt-1">
+                                            <button
+                                              type="submit"
+                                              disabled={isCreatingTask || !selectedTaskListId || !newTaskTitle.trim()}
+                                              className="px-4 py-2 bg-gradient-to-r from-sky-400 to-indigo-500 font-bold text-slate-950 hover:opacity-90 rounded-xl text-xs active:scale-[0.95] transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-40"
+                                            >
+                                              {isCreatingTask ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                                              <span>{isAr ? 'إدراج المهمة السحابية' : 'Insert Task to Google'}</span>
+                                            </button>
+                                          </div>
+                                        </form>
+                                      </div>
+
+                                      {/* Tasks Listing */}
+                                      <div className="p-4 rounded-xl bg-slate-900 border border-slate-850 space-y-3 font-sans">
+                                        <div className="flex items-center justify-between border-b border-slate-850 pb-2">
+                                          <h6 className="text-[11px] font-extrabold text-white uppercase tracking-wider">
+                                            {isAr ? 'قائمة المهام السحابية المسجلة' : 'Synced Google Tasks'}
+                                          </h6>
+                                          <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-slate-950 text-slate-400 border border-slate-800">
+                                            {tasksInSelectedList.length} {isAr ? 'مهام' : 'Tasks'}
+                                          </span>
+                                        </div>
+
+                                        {/* Tasks Filter Search Bar */}
+                                        {tasksInSelectedList.length > 0 && (
+                                          <div className="relative">
+                                            <input
+                                              type="text"
+                                              value={tasksSearchQuery}
+                                              onChange={(e) => setTasksSearchQuery(e.target.value)}
+                                              placeholder={isAr ? 'ابحث في المهام باسم أو وصف المهمة...' : 'Search tasks by name or description...'}
+                                              className={`w-full bg-slate-950 border border-slate-800 rounded-xl py-2 text-white text-xs outline-none focus:border-sky-500 text-right ${
+                                                isAr ? 'pl-3 pr-9' : 'pl-9 pr-3'
+                                              }`}
+                                            />
+                                            <div className={`absolute inset-y-0 flex items-center pointer-events-none ${
+                                              isAr ? 'right-0 pr-3' : 'left-0 pl-3'
+                                            }`}>
+                                              <Search className="h-3.5 w-3.5 text-slate-500" />
+                                            </div>
+                                            {tasksSearchQuery && (
+                                              <button
+                                                type="button"
+                                                onClick={() => setTasksSearchQuery('')}
+                                                className={`absolute inset-y-0 flex items-center text-[10px] text-slate-500 hover:text-white font-bold bg-slate-950/80 px-2 rounded-xl border border-slate-800 focus:outline-none cursor-pointer ${
+                                                  isAr ? 'left-2 my-1.5' : 'right-2 my-1.5'
+                                                }`}
+                                              >
+                                                {isAr ? 'مسح' : 'Clear'}
+                                              </button>
+                                            )}
+                                          </div>
+                                        )}
+
+                                        <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                                          {isLoadingTasks ? (
+                                            <div className="py-8 text-center text-slate-500 animate-pulse text-xs flex flex-col items-center justify-center gap-1.5">
+                                              <Loader2 className="w-5 h-5 animate-spin text-sky-400" />
+                                              <span>{isAr ? 'جاري جلب المهام النشطة...' : 'Retrieving task records from Google Tasks...'}</span>
+                                            </div>
+                                          ) : (() => {
+                                            const filteredTasks = tasksInSelectedList.filter((task: any) => {
+                                              if (!tasksSearchQuery.trim()) return true;
+                                              const term = tasksSearchQuery.toLowerCase();
+                                              return (task.title?.toLowerCase() || '').includes(term) || 
+                                                     (task.notes?.toLowerCase() || '').includes(term);
+                                            });
+
+                                            if (tasksInSelectedList.length === 0) {
+                                              return (
+                                                <div className="py-8 text-center text-slate-500 text-xs font-sans">
+                                                  <CheckCircle2 className="w-6 h-6 text-slate-700 mx-auto mb-2 opacity-50" />
+                                                  <span>{isAr ? 'رائع! لا توجد مهام نشطة في هذه القائمة.' : 'No active tasks found in this list.'}</span>
+                                                </div>
+                                              );
+                                            }
+
+                                            if (filteredTasks.length === 0) {
+                                              return (
+                                                <div className="py-8 text-center text-slate-500 text-xs font-sans">
+                                                  <Search className="w-6 h-6 text-slate-700 mx-auto mb-2 opacity-50 animate-pulse" />
+                                                  <span>{isAr ? 'لم يتم العثور على نتائج مطابقة للبحث.' : 'No matching tasks found for your search.'}</span>
+                                                </div>
+                                              );
+                                            }
+
+                                            return filteredTasks.map((task: any) => {
+                                              const isCompleted = task.status === 'completed';
+                                              return (
+                                                <div 
+                                                  key={task.id} 
+                                                  className={`p-3 rounded-xl border transition-all flex items-start justify-between gap-3 text-right bg-slate-950/40 ${
+                                                    isCompleted 
+                                                      ? 'border-slate-850 opacity-60' 
+                                                      : 'border-slate-850 hover:border-slate-800'
+                                                  }`}
+                                                >
+                                                  <div className="flex items-start gap-2.5 min-w-0 text-right">
+                                                    <input
+                                                      type="checkbox"
+                                                      id={`task-check-${task.id}`}
+                                                      checked={isCompleted}
+                                                      onChange={() => handleToggleTaskStatus(task.id, task.status)}
+                                                      className="mt-1 w-4 h-4 rounded border border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-slate-950 cursor-pointer accent-emerald-500 shrink-0 select-none"
+                                                      title={isAr ? 'تحديد كمكتمل / غير مكتمل' : 'Mark as Complete / Incomplete'}
+                                                    />
+                                                    <div className="min-w-0 text-right space-y-1">
+                                                      <label
+                                                        htmlFor={`task-check-${task.id}`}
+                                                        className={`text-xs font-black block truncate cursor-pointer select-none ${isCompleted ? 'line-through text-slate-500 font-medium' : 'text-slate-200 hover:text-white transition-colors'}`}
+                                                      >
+                                                        {task.title}
+                                                      </label>
+                                                      {task.notes && (
+                                                        <p className="text-[10.5px] text-slate-550 leading-relaxed max-w-md break-words whitespace-pre-line text-right">
+                                                          {task.notes}
+                                                        </p>
+                                                      )}
+                                                      {task.due && (
+                                                        <span className="text-[9px] text-amber-400 bg-amber-500/10 px-2 py-0.5 border border-amber-500/20 inline-flex items-center gap-1 rounded font-mono">
+                                                          <Clock className="w-3 h-3 text-amber-400" />
+                                                          <span>{new Date(task.due).toLocaleDateString(isAr ? 'ar-SA' : 'en-US')}</span>
+                                                        </span>
+                                                      )}
+                                                    </div>
+                                                  </div>
+
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleDeleteTask(task.id, task.title)}
+                                                    className="p-1 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0 cursor-pointer"
+                                                    title={isAr ? 'حذف المهمة نهائياً' : 'Delete task permanently'}
+                                                  >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                  </button>
+                                                </div>
+                                              );
+                                            });
+                                          })()}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {workspaceActiveTab === 'meet' && (
+                              <div className="space-y-6 animate-fadeIn">
+                                <div className="p-5 rounded-2xl bg-slate-950/70 border border-slate-850 space-y-4 text-right">
+                                  {/* Header */}
+                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-900 pb-3">
+                                    <h6 className="text-[12px] font-extrabold text-white uppercase tracking-wider flex items-center gap-2">
+                                      <Video className="w-4 h-4 text-sky-400" />
+                                      <span>{isAr ? 'منصة اجتماعات ولقاءات Google Meet' : 'Google Meet Video Conferencing Hub'}</span>
+                                    </h6>
+                                    {isGeneratingMeetSpace && (
+                                      <span className="text-[10px] text-sky-450 font-bold flex items-center gap-1 animate-pulse">
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-450" />
+                                        {isAr ? 'جاري تهيئة قاعة اللقاء السحابية...' : 'Provisioning Google Meet space...'}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <p className="text-xs text-slate-400 leading-relaxed font-sans text-right">
+                                    {isAr
+                                      ? 'قم بإنشاء وتأسيس قاعات اجتماعات مرئية آمنة وموثوقة لعملائك ومستشاريك من خلال تكامل Google Meet الفيدرالي لإنشاء روابط فورية أو تتبع تاريخ القاعات المعدة مسبقاً.'
+                                      : 'Provision secure, high-definition Google Meet video conferencing rooms natively. Generate instant meeting rooms, copy invitation metadata, and maintain scheduled advisory sessions.'}
+                                  </p>
+
+                                  {/* Error Feedback */}
+                                  {workspaceError && (
+                                    <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-[11px] text-red-400 font-bold text-center">
+                                      {workspaceError}
+                                    </div>
+                                  )}
+
+                                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-2 items-start text-right">
+                                    {/* Create panel: left (col-span-12 lg:col-span-12) */}
+                                    <div className="lg:col-span-5 p-4 rounded-xl bg-slate-900 border border-slate-850 space-y-4">
+                                      <form onSubmit={handleCreateMeetSpace} className="space-y-3.5 text-right">
+                                        <h6 className="text-[11px] font-black text-white uppercase tracking-wider flex items-center gap-1.5 justify-end">
+                                          <Sparkles className="w-3.5 h-3.5 text-sky-400 animate-pulse" />
+                                          <span>{isAr ? 'إنشاء قاعة اجتماعات فورية' : 'Generate Instant Meet Room'}</span>
+                                        </h6>
+
+                                        <div className="space-y-1 block text-right">
+                                          <label className="text-[9.5px] font-bold text-slate-400 block mb-1">
+                                            {isAr ? 'موضوع أو عنوان الاجتماع *' : 'Meeting Title / Purpose *'}
+                                          </label>
+                                          <input
+                                            type="text"
+                                            required
+                                            value={meetSpaceTitle}
+                                            onChange={(e) => setMeetSpaceTitle(e.target.value)}
+                                            placeholder={isAr ? "مثال: مراجعة مخطط المتطلبات الأمنية" : "e.g., General Architecture Review Sync"}
+                                            className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 px-3 text-white text-xs outline-none focus:border-sky-500 text-right font-sans placeholder/text-slate-650"
+                                          />
+                                        </div>
+
+                                        <button
+                                          type="submit"
+                                          disabled={isGeneratingMeetSpace || !meetSpaceTitle.trim()}
+                                          className="w-full py-2.5 bg-gradient-to-r from-sky-450 to-indigo-500 hover:from-sky-400 hover:to-indigo-400 text-slate-950 font-black text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-sky-500/10 transition-all disabled:opacity-55"
+                                        >
+                                          {isGeneratingMeetSpace ? (
+                                            <>
+                                              <Loader2 className="w-4 h-4 animate-spin text-slate-900" />
+                                              <span>{isAr ? 'جاري الإنشاء...' : 'Creating Room...'}</span>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <Video className="w-4 h-4 text-slate-900" />
+                                              <span>{isAr ? 'تأكيد وإنشاء الغرفة الآن' : 'Provision Dedicated Room'}</span>
+                                            </>
+                                          )}
+                                        </button>
+                                      </form>
+
+                                      {/* Sub-card: Newly provisioned space presentation */}
+                                      {createdMeetSpace && (
+                                        <div className="p-3.5 rounded-xl bg-indigo-500/10 border border-indigo-500/35 space-y-3 mt-4 text-right animate-fadeIn">
+                                          <div className="flex items-center justify-between border-b border-indigo-500/20 pb-1.5">
+                                            <span className="text-[8.5px] uppercase font-black tracking-wider text-indigo-400 bg-indigo-550/15 py-0.5 px-1.5 rounded-full">
+                                              {isAr ? 'تم الإنشاء بنجاح' : 'Active Room Created'}
+                                            </span>
+                                            <span className="text-[9.5px] font-black text-indigo-300 font-mono">{createdMeetSpace.meetingCode}</span>
+                                          </div>
+                                          <div>
+                                            <h6 className="text-xs font-extrabold text-white">{createdMeetSpace.title}</h6>
+                                            <p className="text-[9.5px] text-slate-400 mt-1 truncate font-mono">{createdMeetSpace.meetingUri}</p>
+                                          </div>
+                                          <div className="flex gap-2 justify-end">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const inviteText = isAr 
+                                                  ? `يرجى الانضمام لاجتماع مطوري الأعمال (Business Developers)\nالموضوع: ${createdMeetSpace.title}\nالرابط المباشر: ${createdMeetSpace.meetingUri}\nرمز اللقاء: ${createdMeetSpace.meetingCode}`
+                                                  : `Please join the Business Developers consulting meeting.\nTopic: ${createdMeetSpace.title}\nDirect Link: ${createdMeetSpace.meetingUri}\nMeet Code: ${createdMeetSpace.meetingCode}`;
+                                                
+                                                try {
+                                                  navigator.clipboard.writeText(inviteText);
+                                                } catch {
+                                                  const textArea = document.createElement("textarea");
+                                                  textArea.value = inviteText;
+                                                  document.body.appendChild(textArea);
+                                                  textArea.select();
+                                                  document.execCommand("copy");
+                                                  document.body.removeChild(textArea);
+                                                }
+                                                alert(isAr ? '✓ تم نسخ بيانات دعوة الاجتماع المباشرة بنجاح!' : '✓ Direct meeting invite clipboard copy completed!');
+                                              }}
+                                              className="px-2.5 py-1.5 bg-slate-900 border border-slate-800 text-slate-300 rounded-lg text-[9px] font-black hover:text-white transition-colors cursor-pointer"
+                                            >
+                                              {isAr ? 'نسخ الدعوة' : 'Copy Invitation'}
+                                            </button>
+                                            <a
+                                              href={createdMeetSpace.meetingUri}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                              className="px-3 py-1.5 bg-indigo-500 text-slate-950 rounded-lg text-[9px] font-black hover:bg-indigo-400 transition-colors flex items-center gap-1 hover:shadow-md cursor-pointer"
+                                            >
+                                              <span>{isAr ? 'دخول اللقاء ميت ➔' : 'Join Room Now ➔'}</span>
+                                            </a>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* History listing: right (col-span-12 lg:col-span-7) */}
+                                    <div className="lg:col-span-7 p-4 rounded-xl bg-slate-900 border border-slate-850 space-y-4">
+                                      <div className="flex items-center justify-between border-b border-slate-850 pb-2">
+                                        <h6 className="text-[11px] font-extrabold text-white uppercase tracking-wider">
+                                          {isAr ? 'قائمة الغرف المحفوظة' : 'Provisioned Sessions History'}
+                                        </h6>
+                                        <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-slate-950 text-slate-400 border border-slate-800 font-sans">
+                                          {meetSpaces.length} {isAr ? 'غرف' : 'Rooms'}
+                                        </span>
+                                      </div>
+
+                                      <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                                        {meetSpaces.length > 0 ? (
+                                          meetSpaces.map((room: any, rIdx: number) => (
+                                            <div key={rIdx} className="p-3 bg-slate-950/40 rounded-xl border border-slate-850 flex items-center justify-between gap-3 text-right hover:border-slate-800 transition-all font-sans">
+                                              
+                                              {/* Deleted button on leftmost end in RTL layout */}
+                                              <button
+                                                type="button"
+                                                onClick={() => handleDeleteMeetSpace(room.name, room.title)}
+                                                className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer shrink-0"
+                                                title={isAr ? 'حذف من السجل' : 'Remove from logs'}
+                                              >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                              </button>
+
+                                              <div className="flex items-center gap-2">
+                                                <a
+                                                  href={room.meetingUri}
+                                                  target="_blank"
+                                                  rel="noreferrer"
+                                                  className="p-1 px-2.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-lg text-[9px] font-bold hover:bg-indigo-500 hover:text-slate-950 transition-all cursor-pointer flex items-center gap-1 shrink-0"
+                                                >
+                                                  <Video className="w-3 h-3 text-current" />
+                                                  <span>{isAr ? 'دخول اللقاء' : 'Join'}</span>
+                                                </a>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    try {
+                                                      navigator.clipboard.writeText(room.meetingUri);
+                                                    } catch {
+                                                      const t = document.createElement("textarea");
+                                                      t.value = room.meetingUri;
+                                                      document.body.appendChild(t);
+                                                      t.select();
+                                                      document.execCommand("copy");
+                                                      document.body.removeChild(t);
+                                                    }
+                                                    alert(isAr ? '✓ تم نسخ رابط الاجتماع المرئي!' : '✓ Meet link copied successfully!');
+                                                  }}
+                                                  className="p-1.5 bg-slate-900 border border-slate-800 text-slate-500 hover:text-white rounded-lg cursor-pointer transition-colors"
+                                                  title={isAr ? 'نسخ رابط اللقاء' : 'Copy meet link'}
+                                                >
+                                                  <Copy className="w-3 h-3" />
+                                                </button>
+                                              </div>
+
+                                              <div className="min-w-0 text-right space-y-1 pr-1 flex-1">
+                                                <h6 className="text-[11.5px] font-bold text-slate-200 truncate">{room.title}</h6>
+                                                <div className="flex items-center gap-1.5 justify-end text-[9px] font-mono text-slate-500">
+                                                  <span>{room.meetingCode}</span>
+                                                  <span className="w-1 h-1 rounded-full bg-slate-800" />
+                                                  <span>{new Date(room.createdAt).toLocaleDateString(isAr ? 'ar-SA': 'en-US')}</span>
+                                                </div>
+                                              </div>
+
+                                            </div>
+                                          ))
+                                        ) : (
+                                          <div className="py-12 text-center text-slate-500 text-xs font-sans">
+                                            <Video className="w-6 h-6 text-slate-700 mx-auto mb-2 opacity-50" />
+                                            <span>{isAr ? 'لم يتم إنشاء أي قاعات لقاءات مستقلة حالياً.' : 'No standalone meeting rooms provisioned yet.'}</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
                             )}
