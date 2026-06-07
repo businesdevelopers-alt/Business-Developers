@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Lang, Client, ClientRequest } from '../types';
 import { Menu, X, Languages, Sparkles, User, Bell, Check, ArrowRight, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import BSDLogo from './BSDLogo';
 
 // Custom-designed high-fidelity SVG flag components for superb cross-platform rendering
 function SaudiFlag() {
@@ -81,6 +82,38 @@ export default function Navbar({
 }: NavbarProps) {
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState<string>('');
+
+  useEffect(() => {
+    const handleScrollSpy = () => {
+      const scrollPosition = window.scrollY + 180; // offset suited to typical section scrolling
+      
+      const items = [
+        'solutions', 'sectors', 'services-market', 'entrepreneurship',
+        'portfolio', 'clients', 'about', 'faq', 'stats', 'consultation'
+      ];
+
+      for (const id of items) {
+        const el = document.getElementById(id);
+        if (el) {
+          const top = el.offsetTop;
+          const height = el.offsetHeight;
+          if (scrollPosition >= top && scrollPosition < top + height) {
+            setActiveSection(id);
+            return;
+          }
+        }
+      }
+      
+      if (window.scrollY < 120) {
+        setActiveSection('');
+      }
+    };
+
+    window.addEventListener('scroll', handleScrollSpy);
+    handleScrollSpy(); // Trigger immediately on mount
+    return () => window.removeEventListener('scroll', handleScrollSpy);
+  }, []);
 
   // Notification States
   const [bellOpen, setBellOpen] = useState(false);
@@ -203,32 +236,46 @@ export default function Navbar({
         <div className="flex items-center justify-between h-20">
           
           {/* Logo */}
-          <div className="flex items-center space-x-2 rtl:space-x-reverse cursor-pointer" onClick={() => onNavigate('hero')}>
-            <div className="relative w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-600 to-indigo-700 flex items-center justify-center text-white shadow-md shadow-sky-100 overflow-hidden group-hover:scale-105 transition-transform">
-              <Sparkles className="w-5 h-5 absolute animate-pulse text-sky-100" />
+          <div className="flex items-center space-x-2.5 rtl:space-x-reverse cursor-pointer group" onClick={() => onNavigate('hero')}>
+            <div className="relative w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-950 flex items-center justify-center text-slate-900 dark:text-white border border-slate-150 dark:border-slate-800 shadow-3xs overflow-hidden group-hover:scale-105 transition-transform duration-300">
+              <BSDLogo variant="icon" size={28} className="text-sky-600 dark:text-sky-400 group-hover:rotate-12 transition-transform duration-300" />
             </div>
             <div className="flex flex-col">
-              <span className="font-extrabold text-lg text-slate-900 tracking-tight leading-tight">
+              <span className="font-extrabold text-[15px] sm:text-base text-slate-900 dark:text-white tracking-tight leading-tight group-hover:text-sky-600 dark:group-hover:text-sky-400 transition-colors">
                 {lang === 'ar' ? 'بيزنس ديفلوبرز' : 'Business Developers'}
               </span>
-              <span className="text-[10px] text-sky-600 font-bold uppercase tracking-wider">
+              <span className="text-[9.5px] text-sky-600 dark:text-sky-400 font-bold uppercase tracking-wider">
                 {lang === 'ar' ? 'للحلول المتكاملة' : 'Integrated IT Solutions'}
               </span>
             </div>
           </div>
 
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-8 rtl:space-x-reverse">
-            {menuItems.map((item) => (
-              <button
-                key={item.id}
-                id={`nav-link-${item.id}`}
-                onClick={() => onNavigate(item.id)}
-                className="text-sm font-medium text-slate-600 hover:text-sky-600 transition-colors cursor-pointer"
-              >
-                {lang === 'ar' ? item.labelAr : item.labelEn}
-              </button>
-            ))}
+          <nav className="hidden md:flex items-center space-x-4 lg:space-x-6 rtl:space-x-reverse">
+            {menuItems.map((item) => {
+              const isActive = activeSection === item.id;
+              return (
+                <button
+                  key={item.id}
+                  id={`nav-link-${item.id}`}
+                  onClick={() => onNavigate(item.id)}
+                  className={`text-xs lg:text-sm font-semibold transition-all cursor-pointer relative py-1 ${
+                    isActive 
+                      ? 'text-sky-600 dark:text-sky-400 font-extrabold' 
+                      : 'text-slate-600 hover:text-sky-600 dark:text-slate-300 dark:hover:text-sky-400'
+                  }`}
+                >
+                  <span className="relative z-10 px-0.5">{lang === 'ar' ? item.labelAr : item.labelEn}</span>
+                  {isActive && (
+                    <motion.span 
+                      layoutId="activeNavIndicator"
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-sky-600 dark:bg-sky-400 rounded-full"
+                      transition={{ type: "spring", stiffness: 350, damping: 28 }}
+                    />
+                  )}
+                </button>
+              );
+            })}
           </nav>
 
           {/* Extra Actions */}
@@ -589,16 +636,23 @@ export default function Navbar({
             className="md:hidden bg-white border-b border-gray-200 shadow-lg overflow-hidden"
           >
             <div className="px-4 pt-2 pb-6 space-y-3">
-              {menuItems.map((item) => (
-                <button
-                  key={item.id}
-                  id={`mobile-nav-link-${item.id}`}
-                  onClick={() => handleMenuClick(item.id)}
-                  className="block w-full py-2 px-3 text-right ltr:text-left text-base font-medium rounded-lg text-slate-700 hover:bg-slate-50 hover:text-sky-600 transition-colors"
-                >
-                  {lang === 'ar' ? item.labelAr : item.labelEn}
-                </button>
-              ))}
+              {menuItems.map((item) => {
+                const isActive = activeSection === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    id={`mobile-nav-link-${item.id}`}
+                    onClick={() => handleMenuClick(item.id)}
+                    className={`block w-full py-2.5 px-4 text-right ltr:text-left text-base font-bold rounded-xl transition-all cursor-pointer ${
+                      isActive 
+                        ? 'bg-sky-50 text-sky-600 border-l-4 border-sky-600 font-extrabold shadow-3xs' 
+                        : 'text-slate-700 hover:bg-slate-50 hover:text-sky-600'
+                    }`}
+                  >
+                    {lang === 'ar' ? item.labelAr : item.labelEn}
+                  </button>
+                );
+              })}
               <div className="pt-4 border-t border-slate-100 flex flex-col space-y-3">
                 <button
                   id="mobile-ai-help"

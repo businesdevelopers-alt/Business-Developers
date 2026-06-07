@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Lang } from '../types';
 import { Sparkles, Linkedin, Twitter, Mail, ShieldAlert, Copy, Check, PhoneCall } from 'lucide-react';
+import BSDLogo from './BSDLogo';
 
 interface FooterProps {
   lang: Lang;
@@ -29,12 +30,12 @@ export default function Footer({ lang, onNavigate }: FooterProps) {
           
           {/* Logo & Description */}
           <div className="md:col-span-4 space-y-4">
-            <div className="flex items-center space-x-2 rtl:space-x-reverse cursor-pointer" onClick={() => onNavigate('hero')}>
-              <div className="relative w-9 h-9 rounded-lg bg-sky-600 flex items-center justify-center text-white">
-                <Sparkles className="w-4 h-4 text-sky-100" />
+            <div className="flex items-center space-x-2.5 rtl:space-x-reverse cursor-pointer group" onClick={() => onNavigate('hero')}>
+              <div className="relative w-9 h-9 rounded-lg bg-slate-800/80 border border-slate-705/30 flex items-center justify-center text-white shadow-3xs group-hover:scale-105 transition-transform duration-300">
+                <BSDLogo variant="icon" size={24} className="text-sky-400 group-hover:rotate-12 transition-transform duration-300" />
               </div>
               <div className="flex flex-col">
-                <span className="font-extrabold text-base text-white tracking-tight leading-tight">
+                <span className="font-extrabold text-base text-white tracking-tight leading-tight group-hover:text-sky-400 transition-colors">
                   {isAr ? 'بيزنس ديفلوبرز' : 'Business Developers'}
                 </span>
                 <span className="text-[9px] text-sky-400 font-bold uppercase tracking-wider">
@@ -159,10 +160,6 @@ export default function Footer({ lang, onNavigate }: FooterProps) {
                   </span>
                 </button>
               </div>
-            </div>
-
-            <div className="text-[10px] text-slate-500 font-mono">
-              IP-Ingress Proxy: Secure Tunnel 3000
             </div>
           </div>
 
